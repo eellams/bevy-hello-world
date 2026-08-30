@@ -1,20 +1,21 @@
 # Bevy Hello World
 
-A simple Bevy application demonstrating a spinning cube that can be rotated by dragging.
+A simple Bevy application demonstrating a cube that always spins end-over-end while allowing user rotation.
 
 ## Overview
 
-This is a basic Bevy game engine example that renders a blue cube that continuously spins on all three axes (X, Y, Z). You can click and drag on the cube to rotate it manually. The cube always spins automatically from its own perspective, and you can add additional rotation by dragging. It serves as a starting point for learning Bevy, a data-driven game engine built in Rust.
+This is a basic Bevy game engine example that renders a blue cube that continuously spins end-over-end around its local Z-axis. You can click and drag on the cube to rotate it, which changes the orientation of the spin in world space. The cube always spins the same way (end-over-end) from its own perspective, but you can rotate the cube so that this spin moves around in different directions. It serves as a starting point for learning Bevy, a data-driven game engine built in Rust.
 
 ## Features
 
 - Bevy 0.14 with PBR rendering
 - 3D rendering with a proper cube mesh
 - Simple ECS architecture with components and systems
-- Cube spins on all three axes (X, Y, Z) at different rates
-- **Drag to rotate**: Click and drag on the cube to rotate it manually
+- Cube always spins end-over-end around its local Z-axis
+- **Drag to rotate**: Click and drag on the cube to change its orientation
 - Static camera with the cube at the center
-- The cube always spins automatically from its own perspective
+- User rotation + automatic spin are combined
+- The spin direction moves around as you rotate the cube
 - Proper lighting and materials for 3D visualization
 
 ## Prerequisites
@@ -37,7 +38,7 @@ cd bevy-hello-world
 cargo run
 ```
 
-This will compile and run the application, opening a window with a spinning blue cube. Click and drag on the cube to rotate it manually. The cube continuously spins on X, Y, and Z axes from its own perspective, and your manual rotations are added on top.
+This will compile and run the application, opening a window with a spinning blue cube. The cube always spins end-over-end (around its local Z-axis). Click and drag on the cube to rotate it - this changes which direction the spin points in world space. The cube always spins the same way from its own perspective.
 
 ### Build for release
 
@@ -51,11 +52,11 @@ The optimized binary will be available in `target/release/bevy-hello-world`.
 
 ```
 bevy-hello-world/
-├── Cargo.toml    # Project configuration and dependencies
-├── README.md     # This file
+├── Cargo.toml          # Project configuration and dependencies
+├── README.md           # This file
 └── src/
-    ├── main.rs    # Application entry point
-    └── lib.rs     # Core application logic and tests
+    ├── main.rs          # Application entry point
+    └── lib.rs           # Core application logic and tests
 ```
 
 ## Code Explanation
@@ -85,6 +86,7 @@ The application uses Bevy's ECS (Entity Component System) architecture:
 - `Transform`: Position, rotation, and scale of entities
 - `Camera3dBundle`: Static 3D camera with perspective projection
 - `MaterialMeshBundle`: 3D mesh rendering with materials
+- Quaternion math for 3D rotations
 - Multiple entity systems running in sequence with `.chain()`
 
 ## Running Tests
@@ -98,8 +100,8 @@ cargo test
 - **Left Mouse Button + Drag**: Rotate the cube
   - Horizontal movement (left/right): Rotate around Y axis (yaw)
   - Vertical movement (up/down): Rotate around X axis (pitch)
-- The cube will continuously spin on all three axes automatically
-- Your manual rotations are combined with the automatic spin
+- The cube always spins end-over-end around its local Z-axis
+- Your manual rotations change the cube's orientation, which changes how the spin appears in world space
 
 ## License
 

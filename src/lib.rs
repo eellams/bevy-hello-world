@@ -1,8 +1,9 @@
 //! Bevy Hello World - Rotating Cube Example
 //!
 //! This library contains the core application logic for a simple Bevy
-//! application that displays a cube that spins automatically and can be
-//! rotated by dragging with the mouse.
+//! application that displays a cube that always spins end-over-end around
+//! its local Z-axis, while the user can rotate the cube to change the
+//! orientation of that spin in world space.
 
 use bevy::prelude::*;
 use bevy::pbr::MaterialMeshBundle;
@@ -12,13 +13,15 @@ use bevy::window::PrimaryWindow;
 #[derive(Component)]
 pub struct SpinningCube;
 
-/// Component to track drag state for cube rotation
+/// Component to track the user's manual rotation of the cube
 #[derive(Component)]
 pub struct CubeRotation {
+    /// The user's accumulated rotation (without the automatic spin)
+    pub user_rotation: Quat,
     /// Whether the cube is currently being dragged
     pub is_dragging: bool,
-    /// The initial cube rotation when dragging started
-    pub initial_rotation: Quat,
+    /// The user rotation when dragging started
+    pub initial_user_rotation: Quat,
     /// The initial mouse position when dragging started
     pub initial_mouse_pos: Vec2,
 }
@@ -26,8 +29,9 @@ pub struct CubeRotation {
 impl Default for CubeRotation {
     fn default() -> Self {
         Self {
+            user_rotation: Quat::IDENTITY,
             is_dragging: false,
-            initial_rotation: Quat::IDENTITY,
+            initial_user_rotation: Quat::IDENTITY,
             initial_mouse_pos: Vec2::ZERO,
         }
     }
@@ -62,54 +66,61 @@ pub fn setup(
     });
 }
 
-/// System to spin the cube on all three axes at a constant rate
-pub fn spin_cube(time: Res<Time>, mut query: Query<&mut Transform, With<SpinningCube>>) {
-    for mut transform in &mut query {
-        // Spin on all three axes at different rates for interesting motion
-        let t = time.elapsed_seconds();
-        let rotation_x = Quat::from_rotation_x(t * 0.5);
-        let rotation_y = Quat::from_rotation_y(t * 0.7);
-        let rotation_z = Quat::from_rotation_z(t * 1.0);
+/// System to spin the cube end-over-end around its local Z-axis
+/// while preserving the user's manual rotation
+pub fn spin_cube(
+    time: Res<Time>,
+    mut query: Query<(&mut Transform, &CubeRotation), With<SpinningCube>>,
+) {
+    for (mut transform, rotation) in &mut query {
+        // Constant end-over-end spin around local Z-axis
+        let spin_rotation = Quat::from_rotation_z(time.elapsed_seconds() * 2.0);
         
-        // Combine rotations: Z * Y * X (order matters)
-        transform.rotation = rotation_z * rotation_y * rotation_x;
+        // Combine: user rotation first, then spin in local space
+        // This means the cube always spins end-over-end from its own perspective,
+        // but the user can rotate the cube to change which way the spin points
+        transform.rotation = rotation.user_rotation * spin_rotation;
     }
 }
 
-/// System to handle mouse drag to rotate the cube
+/// System to handle mouse drag to rotate the cube's user rotation
 pub fn handle_cube_rotation(
     windows: Query<&Window, With<PrimaryWindow>>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
-    mut query: Query<(&mut Transform, &mut CubeRotation), With<SpinningCube>>,
+    mut query: Query<(&mut CubeRotation, &Transform), With<SpinningCube>>,
 ) {
     let window = windows.single();
     
     if let Some(mouse_pos) = window.cursor_position() {
-        for (mut transform, mut rotation) in &mut query {
+        for (mut cube_rotation, _transform) in &mut query {
             // Start dragging when mouse button is pressed
-            if mouse_button_input.pressed(MouseButton::Left) && !rotation.is_dragging {
-                rotation.is_dragging = true;
-                rotation.initial_rotation = transform.rotation;
-                rotation.initial_mouse_pos = mouse_pos;
+            if mouse_button_input.pressed(MouseButton::Left) && !cube_rotation.is_dragging {
+                cube_rotation.is_dragging = true;
+                cube_rotation.initial_user_rotation = cube_rotation.user_rotation;
+                cube_rotation.initial_mouse_pos = mouse_pos;
             }
             
             // Stop dragging when mouse button is released
-            if !mouse_button_input.pressed(MouseButton::Left) && rotation.is_dragging {
-                rotation.is_dragging = false;
+            if !mouse_button_input.pressed(MouseButton::Left) && cube_rotation.is_dragging {
+                cube_rotation.is_dragging = false;
             }
             
-            // If dragging, rotate the cube based on mouse movement
-            if rotation.is_dragging {
-                let mouse_delta = mouse_pos - rotation.initial_mouse_pos;
+            // If dragging, update the user's rotation based on mouse movement
+            if cube_rotation.is_dragging {
+                let mouse_delta = mouse_pos - cube_rotation.initial_mouse_pos;
                 
-                // Horizontal movement rotates around Y axis
+                // Horizontal movement rotates around world Y axis
                 let yaw_rotation = Quat::from_rotation_y(mouse_delta.x * 0.01);
                 
-                // Vertical movement rotates around X axis
+                // Vertical movement rotates around world X axis
                 let pitch_rotation = Quat::from_rotation_x(mouse_delta.y * 0.01);
                 
-                // Apply rotation relative to initial rotation
-                transform.rotation = rotation.initial_rotation * yaw_rotation * pitch_rotation;
+                // Apply rotation relative to initial user rotation
+                // Order: apply pitch first, then yaw (so it feels natural)
+                cube_rotation.user_rotation = 
+                    cube_rotation.initial_user_rotation * 
+                    pitch_rotation * 
+                    yaw_rotation;
             }
         }
     }
@@ -185,7 +196,7 @@ mod tests {
     fn test_spin_cube_system_signature() {
         // This is a compile-time test that the spin_cube function
         // has the correct signature for a Bevy system
-        let _: fn(Res<Time>, Query<&mut Transform, With<SpinningCube>>) = spin_cube;
+        let _: fn(Res<Time>, Query<(&mut Transform, &CubeRotation), With<SpinningCube>>) = spin_cube;
     }
 
     /// Test that Transform rotation works as expected
@@ -222,7 +233,8 @@ mod tests {
     fn test_cube_rotation_default() {
         let rotation = CubeRotation::default();
         assert!(!rotation.is_dragging);
-        assert_eq!(rotation.initial_rotation, Quat::IDENTITY);
+        assert_eq!(rotation.user_rotation, Quat::IDENTITY);
+        assert_eq!(rotation.initial_user_rotation, Quat::IDENTITY);
         assert_eq!(rotation.initial_mouse_pos, Vec2::ZERO);
     }
 
@@ -230,8 +242,9 @@ mod tests {
     #[test]
     fn test_cube_rotation_custom() {
         let rotation = CubeRotation {
+            user_rotation: Quat::from_rotation_z(std::f32::consts::PI / 4.0),
             is_dragging: true,
-            initial_rotation: Quat::from_rotation_z(std::f32::consts::PI / 2.0),
+            initial_user_rotation: Quat::from_rotation_z(std::f32::consts::PI / 2.0),
             initial_mouse_pos: Vec2::new(100.0, 200.0),
         };
         assert!(rotation.is_dragging);
@@ -245,37 +258,50 @@ mod tests {
         let _: fn(
             Query<&Window, With<PrimaryWindow>>,
             Res<ButtonInput<MouseButton>>,
-            Query<(&mut Transform, &mut CubeRotation), With<SpinningCube>>
+            Query<(&mut CubeRotation, &Transform), With<SpinningCube>>
         ) = handle_cube_rotation;
     }
 
-    /// Test 3D rotation on all axes
+    /// Test end-over-end spin rotation
     #[test]
-    fn test_3d_rotation_all_axes() {
-        let mut transform = Transform::default();
-        let t = 1.0;
+    fn test_end_over_end_spin() {
+        // The cube spins around its local Z-axis
+        let spin_rotation = Quat::from_rotation_z(std::f32::consts::PI); // 180 degrees
         
-        // Create rotations on all three axes
-        let rotation_x = Quat::from_rotation_x(t * 0.5);
-        let rotation_y = Quat::from_rotation_y(t * 0.7);
-        let rotation_z = Quat::from_rotation_z(t * 1.0);
+        // Verify it's a Z-axis rotation
+        let euler = spin_rotation.to_euler(EulerRot::ZXY);
+        assert!(euler.0.abs() > 0.0); // Z component should be non-zero
+    }
+
+    /// Test combined user and spin rotation
+    #[test]
+    fn test_combined_rotation() {
+        // User rotation around Y axis
+        let user_rotation = Quat::from_rotation_y(std::f32::consts::PI / 2.0);
         
-        // Combine rotations
-        transform.rotation = rotation_z * rotation_y * rotation_x;
+        // Spin rotation around Z axis
+        let spin_rotation = Quat::from_rotation_z(std::f32::consts::PI / 4.0);
+        
+        // Combined: user_rotation * spin_rotation
+        let combined = user_rotation * spin_rotation;
         
         // Result should not be identity
-        assert_ne!(transform.rotation, Quat::IDENTITY);
+        assert_ne!(combined, Quat::IDENTITY);
+        
+        // Result should be different from just user rotation
+        assert_ne!(combined, user_rotation);
     }
 
     /// Test quaternion multiplication order
     #[test]
-    fn test_quaternion_multiplication() {
+    fn test_quaternion_multiplication_order() {
         let q1 = Quat::from_rotation_x(std::f32::consts::PI / 2.0);
         let q2 = Quat::from_rotation_y(std::f32::consts::PI / 2.0);
         
-        let combined = q1 * q2;
+        let order1 = q1 * q2;
+        let order2 = q2 * q1;
         
-        // Combined rotation should not be identity
-        assert_ne!(combined, Quat::IDENTITY);
+        // Quaternion multiplication is not commutative
+        assert_ne!(order1, order2);
     }
 }
