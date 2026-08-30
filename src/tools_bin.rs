@@ -17,10 +17,25 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // Camera
+    // 3D Camera - renders first
     commands.spawn((
+        Camera {
+            order: 0,
+            clear_color: ClearColorConfig::Custom(Color::srgb(0.1, 0.1, 0.1)),
+            ..default()
+        },
         Camera3d::default(),
         Transform::from_xyz(0.0, 0.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+    
+    // 2D Camera for UI - renders second, on top
+    commands.spawn((
+        Camera {
+            order: 1,
+            clear_color: ClearColorConfig::None,
+            ..default()
+        },
+        Camera2d,
     ));
     
     // Light
@@ -42,7 +57,7 @@ fn setup(
         Transform::from_xyz(0.0, 0.0, 0.0),
     ));
     
-    // Text - following the exact pattern from the example
+    // Text - following the pattern from the example
     commands.spawn((
         Text::new("3D Cube with Shader\nThe cube is rotating"),
         TextFont::default(),
