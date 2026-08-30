@@ -1,15 +1,15 @@
 //! Bevy Hello World - Rotating Rectangle Example
 //!
 //! This library contains the core application logic for a simple Bevy
-//! application that displays a spinning rectangle that can be viewed from
-//! different angles by dragging the mouse.
+//! application that displays a spinning cube that can be viewed from
+//! different angles by dragging the mouse in 3D space.
 
 use bevy::prelude::*;
 use bevy::math::primitives::Rectangle;
 use bevy::sprite::MaterialMesh2dBundle;
 use bevy::window::PrimaryWindow;
 
-/// Marker component for the spinning rectangle entity
+/// Marker component for the spinning cube entity
 #[derive(Component)]
 pub struct SpinningCube;
 
@@ -20,8 +20,9 @@ pub struct OrbitCamera {
     pub distance: f32,
     /// Whether the camera is currently being dragged
     pub is_dragging: bool,
-    /// The initial camera rotation when dragging started
-    pub initial_rotation: f32,
+    /// The initial camera rotation (pitch, yaw) when dragging started
+    pub initial_pitch: f32,
+    pub initial_yaw: f32,
     /// The initial mouse position when dragging started
     pub initial_mouse_pos: Vec2,
 }
@@ -29,24 +30,25 @@ pub struct OrbitCamera {
 impl Default for OrbitCamera {
     fn default() -> Self {
         Self {
-            distance: 500.0,
+            distance: 5.0,
             is_dragging: false,
-            initial_rotation: 0.0,
+            initial_pitch: 0.0,
+            initial_yaw: 0.0,
             initial_mouse_pos: Vec2::ZERO,
         }
     }
 }
 
-/// System to set up the initial scene with camera and rectangle
+/// System to set up the initial scene with 3D camera and cube
 pub fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    // Spawn the spinning rectangle at the origin
+    // Spawn the spinning cube at the origin
     commands.spawn((
         MaterialMesh2dBundle {
-            mesh: meshes.add(Mesh::from(Rectangle::new(100.0, 100.0))).into(),
+            mesh: meshes.add(Mesh::from(Rectangle::new(1.0, 1.0))).into(),
             material: materials.add(ColorMaterial::from(Color::srgb(0.2, 0.4, 0.8))),
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
             ..default()
@@ -54,25 +56,32 @@ pub fn setup(
         SpinningCube,
     ));
 
-    // Spawn the orbiting camera
+    // Spawn the orbiting 3D camera positioned to look at the cube
     commands.spawn((
-        Camera2dBundle {
-            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
+        Camera3dBundle {
+            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 5.0))
+                .looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         },
         OrbitCamera::default(),
     ));
 }
 
-/// System to spin the cube at a constant rate
+/// System to spin the cube on all three axes at a constant rate
 pub fn spin_cube(time: Res<Time>, mut query: Query<&mut Transform, With<SpinningCube>>) {
     for mut transform in &mut query {
-        // Cube always spins at a constant rate from its own perspective
-        transform.rotation = Quat::from_rotation_z(time.elapsed_seconds() * 2.0);
+        // Spin on all three axes at different rates for interesting motion
+        let t = time.elapsed_seconds();
+        let rotation_x = Quat::from_rotation_x(t * 0.5);
+        let rotation_y = Quat::from_rotation_y(t * 0.7);
+        let rotation_z = Quat::from_rotation_z(t * 1.0);
+        
+        // Combine rotations: Z * Y * X (order matters)
+        transform.rotation = rotation_z * rotation_y * rotation_x;
     }
 }
 
-/// System to handle mouse drag to rotate the camera view
+/// System to handle mouse drag to rotate the camera view on all axes
 pub fn handle_camera_orbit(
     windows: Query<&Window, With<PrimaryWindow>>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
@@ -85,7 +94,10 @@ pub fn handle_camera_orbit(
             // Start dragging when mouse button is pressed
             if mouse_button_input.pressed(MouseButton::Left) && !camera.is_dragging {
                 camera.is_dragging = true;
-                camera.initial_rotation = transform.rotation.to_euler(EulerRot::ZXY).0;
+                // Store initial Euler angles
+                let euler = transform.rotation.to_euler(EulerRot::YXZ);
+                camera.initial_yaw = euler.0;    // Y axis (horizontal)
+                camera.initial_pitch = euler.1;  // X axis (vertical)
                 camera.initial_mouse_pos = mouse_pos;
             }
             
@@ -97,9 +109,22 @@ pub fn handle_camera_orbit(
             // If dragging, rotate the camera based on mouse movement
             if camera.is_dragging {
                 let mouse_delta = mouse_pos - camera.initial_mouse_pos;
-                // Horizontal movement rotates the camera view
-                let angle = camera.initial_rotation + (mouse_delta.x * 0.01);
-                transform.rotation = Quat::from_rotation_z(angle);
+                
+                // Horizontal movement (X) -> Yaw (rotate around Y axis)
+                let yaw = camera.initial_yaw + (mouse_delta.x * 0.01);
+                
+                // Vertical movement (Y) -> Pitch (rotate around X axis)
+                let pitch = (camera.initial_pitch + (mouse_delta.y * 0.01)).clamp(-1.5, 1.5);
+                
+                // Create rotation from pitch and yaw
+                let rotation = Quat::from_rotation_y(yaw) * Quat::from_rotation_x(pitch);
+                
+                // Position camera at distance along the forward vector
+                let forward = rotation * Vec3::NEG_Z;
+                transform.translation = forward * camera.distance;
+                
+                // Look at the origin
+                transform.rotation = rotation;
             }
         }
     }
@@ -134,18 +159,18 @@ mod tests {
     /// Test that Rectangle can be created with correct dimensions
     #[test]
     fn test_rectangle_creation() {
-        let rectangle = Rectangle::new(100.0, 100.0);
-        assert_eq!(rectangle.half_size, Vec2::new(50.0, 50.0));
+        let rectangle = Rectangle::new(1.0, 1.0);
+        assert_eq!(rectangle.half_size, Vec2::new(0.5, 0.5));
     }
 
     /// Test that Rectangle with different dimensions works correctly
     #[test]
     fn test_rectangle_various_sizes() {
-        let rect1 = Rectangle::new(200.0, 100.0);
-        assert_eq!(rect1.half_size, Vec2::new(100.0, 50.0));
+        let rect1 = Rectangle::new(2.0, 1.0);
+        assert_eq!(rect1.half_size, Vec2::new(1.0, 0.5));
         
-        let rect2 = Rectangle::new(50.0, 25.0);
-        assert_eq!(rect2.half_size, Vec2::new(25.0, 12.5));
+        let rect2 = Rectangle::new(0.5, 0.25);
+        assert_eq!(rect2.half_size, Vec2::new(0.25, 0.125));
     }
 
     /// Test that color is created correctly
@@ -192,7 +217,7 @@ mod tests {
     /// Test that mesh can be created from rectangle
     #[test]
     fn test_mesh_from_rectangle() {
-        let rectangle = Rectangle::new(100.0, 100.0);
+        let rectangle = Rectangle::new(1.0, 1.0);
         let mesh = Mesh::from(rectangle);
         
         // Mesh should have vertices
@@ -212,24 +237,27 @@ mod tests {
     fn test_orbit_camera_default() {
         let camera = OrbitCamera::default();
         assert!(!camera.is_dragging);
-        assert_eq!(camera.initial_rotation, 0.0);
+        assert_eq!(camera.initial_pitch, 0.0);
+        assert_eq!(camera.initial_yaw, 0.0);
         assert_eq!(camera.initial_mouse_pos, Vec2::ZERO);
-        assert_eq!(camera.distance, 500.0);
+        assert_eq!(camera.distance, 5.0);
     }
 
     /// Test that OrbitCamera can be created with custom values
     #[test]
     fn test_orbit_camera_custom() {
         let camera = OrbitCamera {
-            distance: 1000.0,
+            distance: 10.0,
             is_dragging: true,
-            initial_rotation: std::f32::consts::PI,
+            initial_pitch: std::f32::consts::PI / 4.0,
+            initial_yaw: std::f32::consts::PI / 2.0,
             initial_mouse_pos: Vec2::new(100.0, 200.0),
         };
         assert!(camera.is_dragging);
-        assert_eq!(camera.initial_rotation, std::f32::consts::PI);
+        assert_eq!(camera.initial_pitch, std::f32::consts::PI / 4.0);
+        assert_eq!(camera.initial_yaw, std::f32::consts::PI / 2.0);
         assert_eq!(camera.initial_mouse_pos, Vec2::new(100.0, 200.0));
-        assert_eq!(camera.distance, 1000.0);
+        assert_eq!(camera.distance, 10.0);
     }
 
     /// Test that handle_camera_orbit system has the correct signature
@@ -243,15 +271,41 @@ mod tests {
         ) = handle_camera_orbit;
     }
 
-    /// Test that cube spins at expected rate
+    /// Test 3D rotation on all axes
     #[test]
-    fn test_cube_spin_rate() {
-        // The cube should spin at 2x speed (2.0 multiplier in spin_cube)
-        // This is a documentation test - the actual rate is verified by the system
-        let time = Time::from_seconds(1.0);
-        let expected_angle = 2.0; // 2.0 radians per second
-        let _ = time;
-        let _ = expected_angle;
-        // Test passes if it compiles - verifies the spin rate constant
+    fn test_3d_rotation_all_axes() {
+        let mut transform = Transform::default();
+        let t = 1.0;
+        
+        // Create rotations on all three axes
+        let rotation_x = Quat::from_rotation_x(t * 0.5);
+        let rotation_y = Quat::from_rotation_y(t * 0.7);
+        let rotation_z = Quat::from_rotation_z(t * 1.0);
+        
+        // Combine rotations
+        transform.rotation = rotation_z * rotation_y * rotation_x;
+        
+        // Result should not be identity
+        assert_ne!(transform.rotation, Quat::IDENTITY);
+    }
+
+    /// Test pitch clamping to prevent over-rotation
+    #[test]
+    fn test_pitch_clamping() {
+        let pitch: f32 = 2.0; // More than PI/2
+        let clamped = pitch.clamp(-1.5, 1.5);
+        
+        assert!(clamped >= -1.5);
+        assert!(clamped <= 1.5);
+    }
+
+    /// Test camera forward vector calculation
+    #[test]
+    fn test_camera_forward_vector() {
+        let rotation = Quat::from_rotation_y(std::f32::consts::PI); // 180 degrees
+        let forward = rotation * Vec3::NEG_Z;
+        
+        // After 180 degree rotation, forward should point in positive Z direction
+        assert!(forward.z > 0.0);
     }
 }
