@@ -1,4 +1,4 @@
-//! Shader Testing Tools Entry Point - Test if 2D rendering works at all
+//! Shader Testing Tools Entry Point - Minimal UI test
 //!
 //! Run with: cargo run --bin shader-tools
 
@@ -12,32 +12,29 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-    // Only a 2D camera
+    // Camera2d for UI
     commands.spawn(Camera2d);
     
-    // Test 1: A colored sprite (definitely should be visible)
+    // Create a UI root node
     commands.spawn((
-        Sprite {
-            color: Color::srgb(1.0, 0.0, 0.0), // Bright red
-            custom_size: Some(Vec2::new(200.0, 100.0)),
-            ..default()
-        },
-        Transform::from_xyz(0.0, 0.0, 0.0),
-        GlobalTransform::default(),
-        Name::new("Red Rectangle"),
-    ));
-    
-    // Test 2: Text on top of the sprite
-    commands.spawn((
-        Text::new("HELLO WORLD"),
-        TextFont::default(),
-        TextColor(Color::WHITE),
         Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(0.0),
-            left: Val::Px(0.0),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
             ..default()
         },
-        Name::new("Text"),
-    ));
+        Name::new("Root"),
+    )).with_children(|parent| {
+        // Text as child of root
+        parent.spawn((
+            Text::new("HELLO WORLD"),
+            TextFont::default(),
+            TextColor(Color::WHITE),
+            Node {
+                ..default()
+            },
+        ));
+    });
 }
