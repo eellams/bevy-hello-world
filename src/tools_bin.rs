@@ -17,16 +17,23 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // 3D Camera - renders the cube
+    // 3D Camera - renders the cube (order 0 = default, renders first)
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(0.0, 0.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
         Name::new("3D Camera"),
     ));
     
-    // 2D Camera for UI overlay - must come AFTER Camera3d for proper layering
+    // 2D Camera for UI overlay - order 1 = renders after 3D
+    // Don't clear the screen, render on top
     commands.spawn((
+        Camera {
+            order: 1,
+            clear_color: ClearColorConfig::None,
+            ..default()
+        },
         Camera2d,
+        Transform::from_xyz(0.0, 0.0, 10.0),
         Name::new("UI Camera"),
     ));
     
