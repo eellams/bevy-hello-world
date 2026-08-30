@@ -134,14 +134,13 @@ pub fn setup_shader_testing_framework(
 
     // Spawn shader test entity
     commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
-                color: Color::srgb(0.2, 0.4, 0.8),
-                custom_size: Some(Vec2::new(200.0, 200.0)),
-                ..default()
-            },
+        Sprite {
+            color: Color::srgb(0.2, 0.4, 0.8),
+            custom_size: Some(Vec2::new(200.0, 200.0)),
             ..default()
         },
+        Transform::default(),
+        GlobalTransform::default(),
         ShaderTestEntity,
         CustomShader {
             shader_path: "shaders/test_shader.wgsl".to_string(),

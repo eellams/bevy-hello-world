@@ -1,13 +1,12 @@
 //! Geometry utilities for shader testing
 
 use bevy::prelude::*;
-use bevy::math::primitives::*;
-use bevy::render::mesh::Indices;
-use bevy::render::render_asset::RenderAssetUsages;
+use bevy::render::mesh::PrimitiveTopology;
+use bevy::asset::RenderAssetUsages;
 
 /// Create a circle mesh
 pub fn create_circle_mesh(radius: f32, segments: usize) -> Mesh {
-    let mut mesh = Mesh::new(bevy::render::mesh::PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
     
     let center = [0.0, 0.0, 0.0];
     let mut positions = vec![center];
@@ -32,7 +31,7 @@ pub fn create_circle_mesh(radius: f32, segments: usize) -> Mesh {
 
 /// Create a triangle mesh
 pub fn create_triangle_mesh() -> Mesh {
-    let mut mesh = Mesh::new(bevy::render::mesh::PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
     
     let vertices = vec![
         ([0.0, 1.0, 0.0], [0.5, 1.0]),

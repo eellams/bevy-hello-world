@@ -35,8 +35,8 @@ impl ShaderEntry {
     }
 }
 
-/// Event for shader compilation results
-#[derive(Event, Debug)]
+/// Message for shader compilation results
+#[derive(Message, Debug)]
 pub struct ShaderCompilationEvent {
     pub shader_name: String,
     pub success: bool,
@@ -67,7 +67,7 @@ pub fn load_shaders_from_directory(
 
 /// System to watch for shader file changes and reload them
 pub fn shader_hot_reload_system(
-    mut compilation_events: EventWriter<ShaderCompilationEvent>,
+    mut compilation_events: MessageWriter<ShaderCompilationEvent>,
 ) {
     // In a real implementation, this would watch for file changes
     // For now, this is a placeholder

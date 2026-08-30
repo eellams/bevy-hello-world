@@ -1,6 +1,5 @@
-//! GUI framework for Bevy with reusable components
+//! GUI components for Bevy
+//!
+//! This module provides custom GUI components that extend bevy_ui.
 
-pub mod button;
 pub mod slider;
-pub mod panel;
-pub mod state;
