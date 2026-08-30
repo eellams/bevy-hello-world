@@ -17,14 +17,14 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // 3D Camera
+    // 3D Camera - renders the cube
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(0.0, 0.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
         Name::new("3D Camera"),
     ));
     
-    // 2D Camera for UI overlay
+    // 2D Camera for UI overlay - must come AFTER Camera3d for proper layering
     commands.spawn((
         Camera2d,
         Name::new("UI Camera"),
@@ -53,14 +53,39 @@ fn setup(
         Name::new("Light"),
     ));
     
-    // Some text on screen
+    // UI Panel - using bevy_ui Node
     commands.spawn((
-        Text2d::new("3D Cube with Shader"),
-        TextColor(Color::WHITE),
-        Transform::from_xyz(0.0, 200.0, 0.0),
-        GlobalTransform::default(),
-        Name::new("Title"),
-    ));
+        Node {
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            padding: UiRect::all(Val::Px(10.0)),
+            position_type: PositionType::Absolute,
+            left: Val::Px(10.0),
+            top: Val::Px(10.0),
+            width: Val::Px(200.0),
+            ..default()
+        },
+        BackgroundColor(Color::srgb(0.15, 0.15, 0.15)),
+        Name::new("UI Panel"),
+    )).with_children(|parent| {
+        // Title text
+        parent.spawn((
+            Text::new("3D Cube with Shader"),
+            TextColor(Color::WHITE),
+            TextFont::default(),
+            Node {
+                margin: UiRect::bottom(Val::Px(10.0)),
+                ..default()
+            },
+        ));
+        
+        // Info text
+        parent.spawn((
+            Text::new("The cube is rotating"),
+            TextColor(Color::srgb(0.8, 0.8, 0.8)),
+            TextFont::default().with_font_size(12.0),
+        ));
+    });
 }
 
 fn rotate_cube(
