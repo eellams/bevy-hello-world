@@ -44,26 +44,3 @@ impl PanelBundle {
         bundle
     }
 }
-
-/// Bundle for a panel with a title
-#[derive(Bundle)]
-pub struct PanelWithTitleBundle {
-    pub panel: PanelBundle,
-    pub title: TextBundle,
-}
-
-impl PanelWithTitleBundle {
-    pub fn new(title: &str) -> Self {
-        Self {
-            panel: PanelBundle::default(),
-            title: TextBundle::from_section(
-                title,
-                TextStyle {
-                    font_size: 18.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
-        }
-    }
-}

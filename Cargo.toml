@@ -15,3 +15,16 @@ bevy = { version = "0.14", default-features = false, features = [
     "png",
     "x11",
 ] }
+
+[[bin]]
+name = "bevy-hello-world"
+path = "src/main.rs"
+
+[[bin]]
+name = "shader-tools"
+path = "src/tools_bin.rs"
+required-features = ["shader-tools"]
+
+[features]
+default = []
+shader-tools = []
