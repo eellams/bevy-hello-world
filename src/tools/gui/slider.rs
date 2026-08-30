@@ -277,14 +277,52 @@ pub fn apply_slider_value_changes(
 /// Bundle for a slider with a text display
 #[derive(Bundle)]
 pub struct SliderWithDisplayBundle {
-    pub slider: SliderBundle,
+    /// The container node
+    pub node: Node,
+    /// The track (background bar)
+    pub track: Node,
+    pub track_background: BackgroundColor,
+    /// The handle (draggable part)
+    pub handle: SliderHandleBundle,
+    /// Slider configuration
+    pub slider: Slider,
+    /// Text display for the value
     pub display: Text,
 }
 
 impl SliderWithDisplayBundle {
     pub fn new(min: f32, max: f32, value: f32) -> Self {
+        let slider = Slider::new(min, max, value);
+        let position = slider.handle_position();
+        
         Self {
-            slider: SliderBundle::new(min, max, value),
+            node: Node {
+                width: Val::Px(200.0),
+                height: Val::Px(40.0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            track: Node {
+                width: Val::Px(200.0),
+                height: Val::Px(8.0),
+                ..default()
+            },
+            track_background: BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
+            handle: SliderHandleBundle {
+                node: Node {
+                    width: Val::Px(20.0),
+                    height: Val::Px(20.0),
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(position),
+                    top: Val::Px(10.0),
+                    ..default()
+                },
+                background_color: BackgroundColor(Color::srgb(0.6, 0.6, 0.6)),
+                handle: SliderHandle,
+            },
+            slider,
             display: Text::new(format!("{:.2}", value)),
         }
     }
