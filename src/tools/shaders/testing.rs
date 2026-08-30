@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use bevy::math::primitives::Rectangle;
 use super::material::*;
 
 /// Resource to hold available shaders
@@ -11,17 +10,13 @@ pub struct ShaderLibrary {
 
 #[derive(Debug, Clone)]
 pub struct ShaderInfo {
-    pub name: String,
     pub path: String,
-    pub description: String,
 }
 
 impl ShaderLibrary {
-    pub fn add_shader(&mut self, name: &str, path: &str, description: &str) {
+    pub fn add_shader(&mut self, path: &str) {
         self.shaders.push(ShaderInfo {
-            name: name.to_string(),
             path: path.to_string(),
-            description: description.to_string(),
         });
     }
 
@@ -55,14 +50,12 @@ pub struct GeometryLibrary {
 
 #[derive(Debug, Clone)]
 pub struct GeometryInfo {
-    pub name: String,
     pub size: Vec2,
 }
 
 impl GeometryLibrary {
-    pub fn add_geometry(&mut self, name: &str, size: Vec2) {
+    pub fn add_geometry(&mut self, size: Vec2) {
         self.geometries.push(GeometryInfo {
-            name: name.to_string(),
             size,
         });
     }
@@ -92,14 +85,12 @@ impl GeometryLibrary {
 #[derive(Resource, Debug, Clone)]
 pub struct CurrentShader {
     pub shader_path: String,
-    pub name: String,
 }
 
 impl Default for CurrentShader {
     fn default() -> Self {
         Self {
             shader_path: "shaders/test_shader.wgsl".to_string(),
-            name: "Test Shader".to_string(),
         }
     }
 }
@@ -111,41 +102,25 @@ pub fn setup_shader_testing_framework(
     mut geometry_library: ResMut<GeometryLibrary>,
 ) {
     // Add some example shaders
-    shader_library.add_shader(
-        "Test Shader",
-        "shaders/test_shader.wgsl",
-        "A basic test shader"
-    );
-    shader_library.add_shader(
-        "Color Shader",
-        "shaders/color_shader.wgsl",
-        "Color manipulation shader"
-    );
-    shader_library.add_shader(
-        "Pattern Shader",
-        "shaders/pattern_shader.wgsl",
-        "Pattern generation shader"
-    );
+    shader_library.add_shader("shaders/test_shader.wgsl");
+    shader_library.add_shader("shaders/color_shader.wgsl");
+    shader_library.add_shader("shaders/pattern_shader.wgsl");
 
     // Add some geometries
-    geometry_library.add_geometry("Rectangle", Vec2::new(200.0, 200.0));
-    geometry_library.add_geometry("Circle", Vec2::new(200.0, 200.0));
-    geometry_library.add_geometry("Triangle", Vec2::new(200.0, 200.0));
+    geometry_library.add_geometry(Vec2::new(200.0, 200.0));
+    geometry_library.add_geometry(Vec2::new(200.0, 200.0));
+    geometry_library.add_geometry(Vec2::new(200.0, 200.0));
 
-    // Spawn shader test entity
+    // Spawn shader test entity - a large colored quad in the center
     commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
-                color: Color::srgb(0.2, 0.4, 0.8),
-                custom_size: Some(Vec2::new(200.0, 200.0)),
-                ..default()
-            },
+        Sprite {
+            color: Color::srgb(0.8, 0.2, 0.4),
+            custom_size: Some(Vec2::new(400.0, 400.0)),
             ..default()
         },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        GlobalTransform::default(),
         ShaderTestEntity,
-        CustomShader {
-            shader_path: "shaders/test_shader.wgsl".to_string(),
-        },
     ));
 
     // Add framework marker
@@ -158,7 +133,6 @@ pub fn shader_switching_system(
     mut shader_library: ResMut<ShaderLibrary>,
     mut geometry_library: ResMut<GeometryLibrary>,
     mut current_shader: ResMut<CurrentShader>,
-    mut shader_params: ResMut<ShaderParameters>,
     mut test_query: Query<&mut Sprite>, 
 ) {
     if keyboard_input.just_pressed(KeyCode::ArrowRight) {
@@ -183,7 +157,6 @@ pub fn shader_switching_system(
         shader_library.next();
         if let Some(shader) = shader_library.current() {
             current_shader.shader_path = shader.path.clone();
-            current_shader.name = shader.name.clone();
         }
     }
     
@@ -191,7 +164,6 @@ pub fn shader_switching_system(
         shader_library.previous();
         if let Some(shader) = shader_library.current() {
             current_shader.shader_path = shader.path.clone();
-            current_shader.name = shader.name.clone();
         }
     }
 }
