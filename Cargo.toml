@@ -23,8 +23,3 @@ path = "src/main.rs"
 [[bin]]
 name = "shader-tools"
 path = "src/tools_bin.rs"
-required-features = ["shader-tools"]
-
-[features]
-default = []
-shader-tools = []
