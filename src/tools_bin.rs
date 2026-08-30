@@ -17,28 +17,11 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // 3D Camera - renders the cube (order -1 = render first)
+    // 3D Camera
     commands.spawn((
-        Camera {
-            order: -1,
-            clear_color: ClearColorConfig::Custom(Color::srgb(0.1, 0.1, 0.1)),
-            ..default()
-        },
         Camera3d::default(),
         Transform::from_xyz(0.0, 0.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
         Name::new("3D Camera"),
-    ));
-    
-    // 2D Camera for UI overlay - order 0 = renders after 3D
-    // Don't clear, render on top of 3D
-    commands.spawn((
-        Camera {
-            order: 0,
-            clear_color: ClearColorConfig::None,
-            ..default()
-        },
-        Camera2d,
-        Name::new("UI Camera"),
     ));
     
     // A cube with a colored material
@@ -64,40 +47,20 @@ fn setup(
         Name::new("Light"),
     ));
     
-    // UI Panel - using bevy_ui Node
-    // Positioned in screen space (2D coordinates)
+    // UI Text - using the pattern from the Bevy example
+    // Text with Node at absolute screen position
     commands.spawn((
+        Text::new("3D Cube with Shader\nThe cube is rotating"),
+        TextFont::default(),
+        TextColor(Color::WHITE),
         Node {
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Center,
-            padding: UiRect::all(Val::Px(10.0)),
             position_type: PositionType::Absolute,
-            left: Val::Px(10.0),
             top: Val::Px(10.0),
-            width: Val::Px(200.0),
+            left: Val::Px(10.0),
             ..default()
         },
-        BackgroundColor(Color::srgb(0.15, 0.15, 0.15)),
-        Name::new("UI Panel"),
-    )).with_children(|parent| {
-        // Title text
-        parent.spawn((
-            Text::new("3D Cube with Shader"),
-            TextColor(Color::WHITE),
-            TextFont::default(),
-            Node {
-                margin: UiRect::bottom(Val::Px(10.0)),
-                ..default()
-            },
-        ));
-        
-        // Info text
-        parent.spawn((
-            Text::new("The cube is rotating"),
-            TextColor(Color::srgb(0.8, 0.8, 0.8)),
-            TextFont::default().with_font_size(12.0),
-        ));
-    });
+        Name::new("UI Text"),
+    ));
 }
 
 fn rotate_cube(
