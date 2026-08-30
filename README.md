@@ -1,19 +1,19 @@
 # Bevy Hello World
 
-A simple Bevy application demonstrating a rotating rectangle on the screen.
+A simple Bevy application demonstrating a spinning cube with draggable camera view.
 
 ## Overview
 
-This is a basic Bevy game engine example that renders a blue rectangle rotating continuously in a window. It serves as a starting point for learning Bevy, a data-driven game engine built in Rust.
+This is a basic Bevy game engine example that renders a blue rectangle that continuously spins. You can drag with your mouse to rotate your view of the spinning cube. The cube always spins at the same rate from its own perspective, while you can orbit around it to see it from different angles. It serves as a starting point for learning Bevy, a data-driven game engine built in Rust.
 
 ## Features
 
 - Bevy 0.14
-- 2D rendering with a rotating rectangle
+- 2D rendering with a spinning rectangle
 - Simple ECS architecture with components and systems
-- Time-based rotation for smooth animation
-- **Drag-to-rotate**: Click and drag the rectangle to rotate it manually
-- Auto-rotation when not being dragged
+- Constant spin rate from the cube's perspective
+- **Drag to orbit**: Click and drag to rotate your view around the spinning cube
+- The cube always spins the same way, but you can change your viewing angle
 
 ## Prerequisites
 
@@ -35,7 +35,7 @@ cd bevy-hello-world
 cargo run
 ```
 
-This will compile and run the application, opening a window with a rotating blue rectangle. Click and drag the rectangle to rotate it manually, or let it auto-rotate.
+This will compile and run the application, opening a window with a spinning blue rectangle. Click and drag anywhere in the window to rotate your view around the cube. The cube always spins at a constant rate from its own perspective.
 
 ### Build for release
 
@@ -75,7 +75,8 @@ The application uses Bevy's ECS (Entity Component System) architecture:
 - `Query`: Used to find and modify entities with specific components
 - `Res<Time>`: Access to time information for animations
 - `ButtonInput<MouseButton>`: Mouse button input handling
-- `GlobalTransform`: Access to entity's global position for hit detection
+- `Transform`: Position, rotation, and scale of entities
+- Multiple entity systems running in sequence with `.chain()`
 
 ## Running Tests
 
