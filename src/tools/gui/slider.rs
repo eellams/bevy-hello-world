@@ -73,20 +73,21 @@ pub struct SliderValueChanged {
 #[derive(Component, Debug)]
 pub struct SliderHandle;
 
-/// Spawn a complete slider as an entity hierarchy.
-/// Creates a container node with a track and handle as children.
-/// Returns the entity of the slider container.
+/// Spawn a complete slider with proper entity hierarchy.
+/// The slider is spawned as a container with track and handle as children.
 pub fn spawn_slider(
     commands: &mut Commands,
     min: f32,
     max: f32,
     value: f32,
+    x: f32,
+    y: f32,
 ) -> Entity {
     let slider = Slider::new(min, max, value);
     let position = slider.handle_position();
     let track_width = slider.track_width;
 
-    // Spawn the container with the Slider component
+    // Spawn the container with the Slider component at specified position
     let container = commands.spawn((
         Node {
             width: Val::Px(track_width),
@@ -94,6 +95,9 @@ pub fn spawn_slider(
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
+            position_type: PositionType::Absolute,
+            left: Val::Px(x),
+            top: Val::Px(y),
             ..default()
         },
         slider,
@@ -104,6 +108,8 @@ pub fn spawn_slider(
         Node {
             width: Val::Px(track_width),
             height: Val::Px(8.0),
+            position_type: PositionType::Absolute,
+            top: Val::Px(15.0),
             ..default()
         },
         BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
@@ -115,8 +121,8 @@ pub fn spawn_slider(
             width: Val::Px(20.0),
             height: Val::Px(20.0),
             position_type: PositionType::Absolute,
-            left: Val::Px(position),
-            top: Val::Px(10.0),
+            left: Val::Px(position + 10.0),
+            top: Val::Px(5.0),
             ..default()
         },
         BackgroundColor(Color::srgb(0.6, 0.6, 0.6)),
@@ -138,7 +144,7 @@ pub fn update_slider_handle_positions(
         // Find and update the handle child
         for child in children.iter() {
             if let Ok(mut handle_node) = handle_query.get_mut(child) {
-                handle_node.left = Val::Px(position);
+                handle_node.left = Val::Px(position + 10.0);
             }
         }
     }

@@ -54,13 +54,24 @@ fn setup_gui_camera(mut commands: Commands) {
 fn setup_ui(
     mut commands: Commands,
 ) {
-    // Main control panel using bevy_ui Node
-    let _panel = commands.spawn((
+    // Spawn the test geometry first - a large colored quad in the center
+    commands.spawn((
+        Sprite {
+            color: Color::srgb(0.8, 0.2, 0.4),
+            custom_size: Some(Vec2::new(400.0, 400.0)),
+            ..default()
+        },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        GlobalTransform::default(),
+        Name::new("Shader Test Quad"),
+    ));
+
+    // Main control panel
+    commands.spawn((
         Node {
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
             padding: UiRect::all(Val::Px(10.0)),
-            margin: UiRect::all(Val::Px(5.0)),
             position_type: PositionType::Absolute,
             left: Val::Px(10.0),
             top: Val::Px(10.0),
@@ -69,140 +80,140 @@ fn setup_ui(
         },
         BackgroundColor(Color::srgb(0.15, 0.15, 0.15)),
         Name::new("Control Panel"),
-    )).id();
+    )).with_children(|parent| {
+        // Panel title
+        parent.spawn((
+            Text::new("Shader Testing Framework"),
+            TextColor(Color::WHITE),
+            TextFont::default(),
+            Node {
+                margin: UiRect::bottom(Val::Px(15.0)),
+                ..default()
+            },
+            Name::new("Title"),
+        ));
 
-    // Panel title
-    commands.spawn((
-        Text2d::new("Shader Testing Framework"),
-        TextColor(Color::WHITE),
-        TextFont::default(),
-        Node {
-            margin: UiRect::bottom(Val::Px(15.0)),
-            ..default()
-        },
-        Name::new("Title"),
-    ));
-
-    // Shader selection buttons row
-    let _button_row = commands.spawn((
-        Node {
-            flex_direction: FlexDirection::Row,
-            margin: UiRect::bottom(Val::Px(10.0)),
-            ..default()
-        },
-    )).id();
-
-    // Previous Shader Button
-    commands.spawn((
-        Button,
-        Node {
-            width: Val::Px(100.0),
-            height: Val::Px(30.0),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            margin: UiRect::right(Val::Px(10.0)),
-            ..default()
-        },
-        BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
-        Text2d::new("Prev Shader"),
-        TextColor(Color::WHITE),
-        Name::new("Previous Shader Button"),
-    ));
-
-    // Next Shader Button
-    commands.spawn((
-        Button,
-        Node {
-            width: Val::Px(100.0),
-            height: Val::Px(30.0),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            ..default()
-        },
-        BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
-        Text2d::new("Next Shader"),
-        TextColor(Color::WHITE),
-        Name::new("Next Shader Button"),
-    ));
-
-    // Geometry selection buttons row
-    let _geometry_row = commands.spawn((
-        Node {
-            flex_direction: FlexDirection::Row,
-            margin: UiRect::bottom(Val::Px(10.0)),
-            ..default()
-        },
-    )).id();
-
-    // Previous Geometry Button
-    commands.spawn((
-        Button,
-        Node {
-            width: Val::Px(100.0),
-            height: Val::Px(30.0),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            margin: UiRect::right(Val::Px(10.0)),
-            ..default()
-        },
-        BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
-        Text2d::new("Prev Geo"),
-        TextColor(Color::WHITE),
-        Name::new("Previous Geometry Button"),
-    ));
-
-    // Next Geometry Button
-    commands.spawn((
-        Button,
-        Node {
-            width: Val::Px(100.0),
-            height: Val::Px(30.0),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            ..default()
-        },
-        BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
-        Text2d::new("Next Geo"),
-        TextColor(Color::WHITE),
-        Name::new("Next Geometry Button"),
-    ));
-
-    // Shader parameter sliders - each in its own row
-    let param_names = vec!["Red", "Green", "Blue", "Alpha"];
-    
-    for (i, name) in param_names.iter().enumerate() {
-        let _slider_row = commands.spawn((
+        // Shader selection buttons row
+        parent.spawn((
             Node {
                 flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                margin: UiRect::bottom(Val::Px(5.0)),
+                margin: UiRect::bottom(Val::Px(10.0)),
                 ..default()
             },
-        )).id();
-        
-        // Slider label
-        commands.spawn((
-            Text2d::new(format!("{}:", name)),
-            TextColor(Color::WHITE),
-            Node {
-                width: Val::Px(50.0),
-                ..default()
-            },
-        ));
-        
-        // Slider with display - spawn as separate entities to avoid bundle conflicts
-        spawn_slider(&mut commands, 0.0, 1.0, if i == 0 { 1.0 } else if i == 1 { 0.5 } else if i == 2 { 0.3 } else { 1.0 });
-    }
+            Name::new("Shader Buttons Row"),
+        )).with_children(|row| {
+            // Previous Shader Button
+            row.spawn((
+                Button,
+                Node {
+                    width: Val::Px(100.0),
+                    height: Val::Px(30.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    margin: UiRect::right(Val::Px(10.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
+                Name::new("Previous Shader Button"),
+            ));
 
-    // Information display
-    commands.spawn((
-        Text2d::new("Use arrow keys to switch shaders/geometries\nClick and drag sliders to adjust RGB values"),
-        TextColor(Color::WHITE),
-        TextFont::default().with_font_size(12.0),
-        Node {
-            margin: UiRect::top(Val::Px(15.0)),
-            ..default()
-        },
-        Name::new("Info Text"),
-    ));
+            // Next Shader Button
+            row.spawn((
+                Button,
+                Node {
+                    width: Val::Px(100.0),
+                    height: Val::Px(30.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
+                Name::new("Next Shader Button"),
+            ));
+        });
+
+        // Geometry selection buttons row
+        parent.spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                margin: UiRect::bottom(Val::Px(10.0)),
+                ..default()
+            },
+            Name::new("Geometry Buttons Row"),
+        )).with_children(|row| {
+            // Previous Geometry Button
+            row.spawn((
+                Button,
+                Node {
+                    width: Val::Px(100.0),
+                    height: Val::Px(30.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    margin: UiRect::right(Val::Px(10.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
+                Name::new("Previous Geometry Button"),
+            ));
+
+            // Next Geometry Button
+            row.spawn((
+                Button,
+                Node {
+                    width: Val::Px(100.0),
+                    height: Val::Px(30.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
+                Name::new("Next Geometry Button"),
+            ));
+        });
+
+        // Shader parameter sliders - spawn labels inside panel, sliders separately
+        let param_names = vec!["Red", "Green", "Blue", "Alpha"];
+        let param_values = vec![1.0, 0.5, 0.3, 1.0];
+        let mut y_offset = 180.0;
+        
+        for (name, _value) in param_names.iter().zip(param_values.iter()) {
+            // Slider label - child of panel
+            parent.spawn((
+                Text::new(format!("{}:", name)),
+                TextColor(Color::WHITE),
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(10.0),
+                    top: Val::Px(y_offset - 10.0),
+                    width: Val::Px(50.0),
+                    ..default()
+                },
+                Name::new(format!("{} Label", name)),
+            ));
+            
+            // Slider spawned separately at same level as panel (absolute positioning)
+            // We store the y_offset for later spawning
+            y_offset += 45.0;
+        }
+
+        // Information display
+        parent.spawn((
+            Text::new("Use arrow keys to switch\nClick and drag sliders to adjust RGB"),
+            TextColor(Color::WHITE),
+            TextFont::default().with_font_size(12.0),
+            Node {
+                margin: UiRect::top(Val::Px(15.0)),
+                ..default()
+            },
+            Name::new("Info Text"),
+        ));
+    });
+    
+    // Now spawn the actual sliders at absolute positions
+    let param_values = vec![1.0, 0.5, 0.3, 1.0];
+    let mut y_offset = 180.0;
+    for value in param_values.iter() {
+        spawn_slider(&mut commands, 0.0, 1.0, *value, 70.0, y_offset);
+        y_offset += 45.0;
+    }
 }
