@@ -56,10 +56,8 @@ fn setup_gui_camera(mut commands: Commands) {
 fn setup_ui(
     mut commands: Commands,
 ) {
-    // Main control panel (PanelBundle already includes Transform via NodeBundle)
-    let mut panel = PanelBundle::new();
-    panel.node.transform = Transform::from_xyz(-300.0, 200.0, 0.0);
-    commands.spawn(panel);
+    // Main control panel
+    commands.spawn(PanelBundle::with_position(-300.0, 200.0, 0.0));
     
     // Panel title
     commands.spawn((
@@ -75,22 +73,30 @@ fn setup_ui(
     ));
 
     // Shader selection buttons
-    let mut prev_shader_btn = GuiButtonBundle::with_text("Previous Shader");
-    prev_shader_btn.node.transform = Transform::from_xyz(-150.0, 150.0, 0.0);
-    commands.spawn((prev_shader_btn, Name::new("Previous Shader Button")));
+    commands.spawn((
+        GuiButtonBundle::with_text("Previous Shader"),
+        Transform::from_xyz(-150.0, 150.0, 0.0),
+        Name::new("Previous Shader Button"),
+    ));
 
-    let mut next_shader_btn = GuiButtonBundle::with_text("Next Shader");
-    next_shader_btn.node.transform = Transform::from_xyz(0.0, 150.0, 0.0);
-    commands.spawn((next_shader_btn, Name::new("Next Shader Button")));
+    commands.spawn((
+        GuiButtonBundle::with_text("Next Shader"),
+        Transform::from_xyz(0.0, 150.0, 0.0),
+        Name::new("Next Shader Button"),
+    ));
 
     // Geometry selection buttons
-    let mut prev_geo_btn = GuiButtonBundle::with_text("Previous Geometry");
-    prev_geo_btn.node.transform = Transform::from_xyz(-150.0, 100.0, 0.0);
-    commands.spawn((prev_geo_btn, Name::new("Previous Geometry Button")));
+    commands.spawn((
+        GuiButtonBundle::with_text("Previous Geometry"),
+        Transform::from_xyz(-150.0, 100.0, 0.0),
+        Name::new("Previous Geometry Button"),
+    ));
 
-    let mut next_geo_btn = GuiButtonBundle::with_text("Next Geometry");
-    next_geo_btn.node.transform = Transform::from_xyz(0.0, 100.0, 0.0);
-    commands.spawn((next_geo_btn, Name::new("Next Geometry Button")));
+    commands.spawn((
+        GuiButtonBundle::with_text("Next Geometry"),
+        Transform::from_xyz(0.0, 100.0, 0.0),
+        Name::new("Next Geometry Button"),
+    ));
 
     // Shader parameter sliders
     let param_names = vec!["Param1", "Param2", "Param3", "Param4"];
@@ -112,15 +118,17 @@ fn setup_ui(
         ));
         
         // Slider
-        let mut slider = SliderWithDisplayBundle::new(0.0, 1.0, 0.5, name);
-        slider.slider.container.transform = Transform::from_xyz(-150.0, y_pos - 20.0, 0.0);
-        commands.spawn(slider);
+        commands.spawn((
+            SliderWithDisplayBundle::new(0.0, 1.0, 0.5, name),
+            Transform::from_xyz(-150.0, y_pos - 20.0, 0.0),
+        ));
     }
 
     // Toggle button example
-    let mut toggle = ToggleButtonBundle::new("ON", "OFF");
-    toggle.button.node.transform = Transform::from_xyz(-150.0, -200.0, 0.0);
-    commands.spawn(toggle);
+    commands.spawn((
+        ToggleButtonBundle::new("ON", "OFF"),
+        Transform::from_xyz(-150.0, -200.0, 0.0),
+    ));
 
     // Information display
     commands.spawn((

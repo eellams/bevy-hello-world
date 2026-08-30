@@ -37,6 +37,14 @@ impl PanelBundle {
         Self::default()
     }
 
+    pub fn with_position(x: f32, y: f32, z: f32) -> Self {
+        let mut bundle = Self::default();
+        bundle.node.transform.translation.x = x;
+        bundle.node.transform.translation.y = y;
+        bundle.node.transform.translation.z = z;
+        bundle
+    }
+
     pub fn with_size(width: Val, height: Val) -> Self {
         let mut bundle = Self::default();
         bundle.node.style.width = width;
