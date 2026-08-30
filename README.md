@@ -1,10 +1,10 @@
 # Bevy Hello World
 
-A simple Bevy application demonstrating a cube that always spins end-over-end while allowing user rotation.
+A simple Bevy application demonstrating a cube that always spins end-over-end with PBR materials and dynamic lighting.
 
 ## Overview
 
-This is a basic Bevy game engine example that renders a blue cube that continuously spins end-over-end around its local Z-axis. You can click and drag on the cube to rotate it, which changes the orientation of the spin in world space. The cube always spins the same way (end-over-end) from its own perspective, but you can rotate the cube so that this spin moves around in different directions. It serves as a starting point for learning Bevy, a data-driven game engine built in Rust.
+This is a basic Bevy game engine example that renders a metallic blue cube that continuously spins end-over-end around its local Z-axis. You can click and drag on the cube to rotate it, which changes the orientation of the spin in world space. The cube always spins the same way (end-over-end) from its own perspective, but you can rotate the cube so that this spin moves around in different directions. A point light orbits the cube to show off the PBR material's lighting effects. It serves as a starting point for learning Bevy, a data-driven game engine built in Rust.
 
 ## Features
 
@@ -16,7 +16,9 @@ This is a basic Bevy game engine example that renders a blue cube that continuou
 - Static camera with the cube at the center
 - User rotation + automatic spin are combined
 - The spin direction moves around as you rotate the cube
-- Proper lighting and materials for 3D visualization
+- **PBR metallic material** with blue color, high metallic, low roughness
+- **Orbiting point light** with warm color that circles the cube
+- Real-time shadows and lighting effects
 
 ## Prerequisites
 

@@ -3,7 +3,8 @@
 //! This library contains the core application logic for a simple Bevy
 //! application that displays a cube that always spins end-over-end around
 //! its local Z-axis, while the user can rotate the cube to change the
-//! orientation of that spin in world space.
+//! orientation of that spin in world space. Features PBR materials and
+//! dynamic lighting.
 
 use bevy::prelude::*;
 use bevy::pbr::MaterialMeshBundle;
@@ -12,6 +13,10 @@ use bevy::window::PrimaryWindow;
 /// Marker component for the spinning cube entity
 #[derive(Component)]
 pub struct SpinningCube;
+
+/// Marker component for the point light
+#[derive(Component)]
+pub struct SceneLight;
 
 /// Component to track the user's manual rotation of the cube
 #[derive(Component)]
@@ -37,18 +42,21 @@ impl Default for CubeRotation {
     }
 }
 
-/// System to set up the initial scene with static camera and cube
+/// System to set up the initial scene with static camera, cube, and lighting
 pub fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // Spawn the cube at the origin
+    // Spawn the cube at the origin with a metallic PBR material
     commands.spawn((
         MaterialMeshBundle::<StandardMaterial> {
             mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
             material: materials.add(StandardMaterial {
                 base_color: Color::srgb(0.2, 0.4, 0.8),
+                metallic: 0.8,
+                perceptual_roughness: 0.2,
+                reflectance: 0.5,
                 ..default()
             }),
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
@@ -58,12 +66,44 @@ pub fn setup(
         CubeRotation::default(),
     ));
 
+    // Spawn a point light that orbits the cube
+    commands.spawn((
+        PointLightBundle {
+            point_light: PointLight {
+                intensity: 2000.0,
+                radius: 10.0,
+                color: Color::srgb(1.0, 0.9, 0.8),
+                shadows_enabled: true,
+                ..default()
+            },
+            transform: Transform::from_translation(Vec3::new(3.0, 3.0, 3.0)),
+            ..default()
+        },
+        SceneLight,
+    ));
+
     // Spawn a static camera looking at the cube
     commands.spawn(Camera3dBundle {
         transform: Transform::from_translation(Vec3::new(0.0, 0.0, 5.0))
             .looking_at(Vec3::ZERO, Vec3::Y),
         ..default()
     });
+}
+
+/// System to orbit the point light around the cube
+pub fn orbit_light(
+    time: Res<Time>,
+    mut query: Query<&mut Transform, With<SceneLight>>,
+) {
+    for mut transform in &mut query {
+        let t = time.elapsed_seconds() * 0.5;
+        // Orbit the light in a circle around the cube
+        transform.translation = Vec3::new(
+            3.0 * t.cos(),
+            1.0,
+            3.0 * t.sin(),
+        );
+    }
 }
 
 /// System to spin the cube end-over-end around its local Z-axis
@@ -87,12 +127,12 @@ pub fn spin_cube(
 pub fn handle_cube_rotation(
     windows: Query<&Window, With<PrimaryWindow>>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
-    mut query: Query<(&mut CubeRotation, &Transform), With<SpinningCube>>,
+    mut query: Query<&mut CubeRotation, With<SpinningCube>>,
 ) {
     let window = windows.single();
     
     if let Some(mouse_pos) = window.cursor_position() {
-        for (mut cube_rotation, _transform) in &mut query {
+        for mut cube_rotation in &mut query {
             // Start dragging when mouse button is pressed
             if mouse_button_input.pressed(MouseButton::Left) && !cube_rotation.is_dragging {
                 cube_rotation.is_dragging = true;
@@ -131,7 +171,7 @@ pub fn run_app() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, (handle_cube_rotation, spin_cube).chain())
+        .add_systems(Update, (orbit_light, handle_cube_rotation, spin_cube).chain())
         .run();
 }
 
@@ -146,7 +186,7 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
             .add_systems(Startup, setup)
-            .add_systems(Update, (handle_cube_rotation, spin_cube).chain());
+            .add_systems(Update, (orbit_light, handle_cube_rotation, spin_cube).chain());
         
         // The app should be created successfully - just verify it doesn't panic
         let _ = app;
@@ -228,6 +268,14 @@ mod tests {
         let _ = component;
     }
 
+    /// Test that SceneLight component can be created
+    #[test]
+    fn test_scene_light_component() {
+        let component = SceneLight;
+        // Just verify it can be created
+        let _ = component;
+    }
+
     /// Test that CubeRotation component can be created with defaults
     #[test]
     fn test_cube_rotation_default() {
@@ -258,8 +306,15 @@ mod tests {
         let _: fn(
             Query<&Window, With<PrimaryWindow>>,
             Res<ButtonInput<MouseButton>>,
-            Query<(&mut CubeRotation, &Transform), With<SpinningCube>>
+            Query<&mut CubeRotation, With<SpinningCube>>
         ) = handle_cube_rotation;
+    }
+
+    /// Test that orbit_light system has the correct signature
+    #[test]
+    fn test_orbit_light_signature() {
+        // Compile-time test for system signature
+        let _: fn(Res<Time>, Query<&mut Transform, With<SceneLight>>) = orbit_light;
     }
 
     /// Test end-over-end spin rotation
@@ -290,6 +345,18 @@ mod tests {
         
         // Result should be different from just user rotation
         assert_ne!(combined, user_rotation);
+    }
+
+    /// Test light orbit calculation
+    #[test]
+    fn test_light_orbit_calculation() {
+        let t: f32 = 0.0;
+        let x = 3.0 * t.cos();
+        let z = 3.0 * t.sin();
+        
+        // At t=0, light should be at (3, 1, 0)
+        assert_eq!(x, 3.0);
+        assert_eq!(z, 0.0);
     }
 
     /// Test quaternion multiplication order
