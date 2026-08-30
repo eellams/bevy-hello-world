@@ -7,8 +7,10 @@
 //! dynamic lighting.
 
 use bevy::prelude::*;
-use bevy::pbr::MaterialMeshBundle;
+use bevy::mesh::Mesh3d;
+use bevy::pbr::MeshMaterial3d;
 use bevy::window::PrimaryWindow;
+use bevy::camera::{Camera, Camera3d};
 
 /// Marker component for the spinning cube entity
 #[derive(Component)]
@@ -50,44 +52,43 @@ pub fn setup(
 ) {
     // Spawn the cube at the origin with a metallic PBR material
     commands.spawn((
-        MaterialMeshBundle::<StandardMaterial> {
-            mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
-            material: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.2, 0.4, 0.8),
-                metallic: 0.8,
-                perceptual_roughness: 0.2,
-                reflectance: 0.5,
-                ..default()
-            }),
-            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
+        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(0.2, 0.4, 0.8),
+            metallic: 0.8,
+            perceptual_roughness: 0.2,
+            reflectance: 0.5,
             ..default()
-        },
+        })),
+        Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
         SpinningCube,
         CubeRotation::default(),
     ));
 
     // Spawn a point light that orbits the cube
     commands.spawn((
-        PointLightBundle {
-            point_light: PointLight {
-                intensity: 2000.0,
-                radius: 10.0,
-                color: Color::srgb(1.0, 0.9, 0.8),
-                shadows_enabled: true,
-                ..default()
-            },
-            transform: Transform::from_translation(Vec3::new(3.0, 3.0, 3.0)),
+        PointLight {
+            intensity: 2000.0,
+            radius: 10.0,
+            color: Color::srgb(1.0, 0.9, 0.8),
+            shadow_maps_enabled: true,
             ..default()
         },
+        Transform::from_translation(Vec3::new(3.0, 3.0, 3.0)),
         SceneLight,
     ));
 
     // Spawn a static camera looking at the cube
-    commands.spawn(Camera3dBundle {
-        transform: Transform::from_translation(Vec3::new(0.0, 0.0, 5.0))
+    commands.spawn((
+        Camera3d {
+            ..default()
+        },
+        Camera {
+            ..default()
+        },
+        Transform::from_translation(Vec3::new(0.0, 0.0, 5.0))
             .looking_at(Vec3::ZERO, Vec3::Y),
-        ..default()
-    });
+    ));
 }
 
 /// System to orbit the point light around the cube
@@ -96,7 +97,7 @@ pub fn orbit_light(
     mut query: Query<&mut Transform, With<SceneLight>>,
 ) {
     for mut transform in &mut query {
-        let t = time.elapsed_seconds() * 0.5;
+        let t = time.elapsed_secs() * 0.5;
         // Orbit the light in a circle around the cube
         transform.translation = Vec3::new(
             3.0 * t.cos(),
@@ -114,7 +115,7 @@ pub fn spin_cube(
 ) {
     for (mut transform, rotation) in &mut query {
         // Constant end-over-end spin around local Z-axis
-        let spin_rotation = Quat::from_rotation_z(time.elapsed_seconds() * 2.0);
+        let spin_rotation = Quat::from_rotation_z(time.elapsed_secs() * 2.0);
         
         // Combine: user rotation first, then spin in local space
         // This means the cube always spins end-over-end from its own perspective,
@@ -129,38 +130,38 @@ pub fn handle_cube_rotation(
     mouse_button_input: Res<ButtonInput<MouseButton>>,
     mut query: Query<&mut CubeRotation, With<SpinningCube>>,
 ) {
-    let window = windows.single();
-    
-    if let Some(mouse_pos) = window.cursor_position() {
-        for mut cube_rotation in &mut query {
-            // Start dragging when mouse button is pressed
-            if mouse_button_input.pressed(MouseButton::Left) && !cube_rotation.is_dragging {
-                cube_rotation.is_dragging = true;
-                cube_rotation.initial_user_rotation = cube_rotation.user_rotation;
-                cube_rotation.initial_mouse_pos = mouse_pos;
-            }
-            
-            // Stop dragging when mouse button is released
-            if !mouse_button_input.pressed(MouseButton::Left) && cube_rotation.is_dragging {
-                cube_rotation.is_dragging = false;
-            }
-            
-            // If dragging, update the user's rotation based on mouse movement
-            if cube_rotation.is_dragging {
-                let mouse_delta = mouse_pos - cube_rotation.initial_mouse_pos;
+    if let Ok(window) = windows.single() {
+        if let Some(mouse_pos) = window.cursor_position() {
+            for mut cube_rotation in &mut query {
+                // Start dragging when mouse button is pressed
+                if mouse_button_input.pressed(MouseButton::Left) && !cube_rotation.is_dragging {
+                    cube_rotation.is_dragging = true;
+                    cube_rotation.initial_user_rotation = cube_rotation.user_rotation;
+                    cube_rotation.initial_mouse_pos = mouse_pos;
+                }
                 
-                // Horizontal movement rotates around world Y axis
-                let yaw_rotation = Quat::from_rotation_y(mouse_delta.x * 0.01);
+                // Stop dragging when mouse button is released
+                if !mouse_button_input.pressed(MouseButton::Left) && cube_rotation.is_dragging {
+                    cube_rotation.is_dragging = false;
+                }
                 
-                // Vertical movement rotates around world X axis
-                let pitch_rotation = Quat::from_rotation_x(mouse_delta.y * 0.01);
-                
-                // Apply rotation relative to initial user rotation
-                // Order: apply pitch first, then yaw (so it feels natural)
-                cube_rotation.user_rotation = 
-                    cube_rotation.initial_user_rotation * 
-                    pitch_rotation * 
-                    yaw_rotation;
+                // If dragging, update the user's rotation based on mouse movement
+                if cube_rotation.is_dragging {
+                    let mouse_delta = mouse_pos - cube_rotation.initial_mouse_pos;
+                    
+                    // Horizontal movement rotates around world Y axis
+                    let yaw_rotation = Quat::from_rotation_y(mouse_delta.x * 0.01);
+                    
+                    // Vertical movement rotates around world X axis
+                    let pitch_rotation = Quat::from_rotation_x(mouse_delta.y * 0.01);
+                    
+                    // Apply rotation relative to initial user rotation
+                    // Order: apply pitch first, then yaw (so it feels natural)
+                    cube_rotation.user_rotation = 
+                        cube_rotation.initial_user_rotation * 
+                        pitch_rotation * 
+                        yaw_rotation;
+                }
             }
         }
     }
