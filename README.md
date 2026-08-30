@@ -1,113 +1,61 @@
-# Bevy Hello World
+# Bevy Hello World Examples
 
-A simple Bevy application demonstrating a cube that always spins end-over-end with PBR materials and dynamic lighting.
+A collection of Bevy game engine examples demonstrating various features and techniques.
 
-## Overview
+## Examples
 
-This is a basic Bevy game engine example that renders a metallic blue cube that continuously spins end-over-end around its local Z-axis. You can click and drag on the cube to rotate it, which changes the orientation of the spin in world space. The cube always spins the same way (end-over-end) from its own perspective, but you can rotate the cube so that this spin moves around in different directions. A point light orbits the cube to show off the PBR material's lighting effects. It serves as a starting point for learning Bevy, a data-driven game engine built in Rust.
+### Example 01: Spinning Cube
 
-## Features
+Located in: `src/example_01_spinning_cube/mod.rs`
 
-- Bevy 0.14 with PBR rendering
-- 3D rendering with a proper cube mesh
-- Simple ECS architecture with components and systems
-- Cube always spins end-over-end around its local Z-axis
-- **Drag to rotate**: Click and drag on the cube to change its orientation
-- Static camera with the cube at the center
-- User rotation + automatic spin are combined
-- The spin direction moves around as you rotate the cube
-- **PBR metallic material** with blue color, high metallic, low roughness
-- **Orbiting point light** with warm color that circles the cube
-- Real-time shadows and lighting effects
+A cube that always spins end-over-end around its local Z-axis, while the user can rotate the cube to change the orientation of that spin in world space.
 
-## Prerequisites
+**Features:**
+- PBR metallic material with blue color
+- End-over-end spin around local Z-axis
+- Drag to rotate the cube
+- Orbiting point light with shadows
+- Static camera
 
-- Rust (latest stable version recommended)
-- Cargo (comes with Rust)
+**Controls:**
+- **Left Mouse Button + Drag**: Rotate the cube
+  - Horizontal movement: Rotate around Y axis (yaw)
+  - Vertical movement: Rotate around X axis (pitch)
 
-## Getting Started
+## Running the Example
 
-### Clone the repository
-
-```bash
-git clone https://github.com/eellams/bevy-hello-world.git
-cd bevy-hello-world
-```
-
-### Run the application
+To run the spinning cube example:
 
 ```bash
 cargo run
 ```
 
-This will compile and run the application, opening a window with a spinning blue cube. The cube always spins end-over-end (around its local Z-axis). Click and drag on the cube to rotate it - this changes which direction the spin points in world space. The cube always spins the same way from its own perspective.
-
-### Build for release
-
-```bash
-cargo build --release
-```
-
-The optimized binary will be available in `target/release/bevy-hello-world`.
-
 ## Project Structure
 
 ```
 bevy-hello-world/
-├── Cargo.toml          # Project configuration and dependencies
-├── README.md           # This file
-└── src/
-    ├── main.rs          # Application entry point
-    └── lib.rs           # Core application logic and tests
+├── Cargo.toml              # Project configuration
+├── README.md               # This file
+├── .gitignore              # Git ignore rules
+├── src/
+│   ├── main.rs             # Entry point (runs example_01)
+│   ├── lib.rs              # Library exports
+│   ├── example_01_spinning_cube/
+│   │   └── mod.rs          # Spinning cube example implementation
+│   └── tools_bin.rs        # Shader tools binary
+└── shaders/                # Shader files
 ```
 
-## Code Explanation
+## Adding New Examples
 
-### main.rs & lib.rs
-
-The application uses Bevy's ECS (Entity Component System) architecture:
-
-- **Components**: Data attached to entities.
-  - `SpinningCube`: Marker component for the spinning rectangle
-  - `OrbitCamera`: Contains camera state for orbiting (distance, pitch, yaw, drag state)
-
-- **Systems**: Logic that runs on entities matching specific queries.
-  - `setup`: Called once at startup, creates the cube and camera.
-  - `spin_cube`: Called every frame, rotates the cube on all three axes.
-  - `handle_camera_orbit`: Called every frame, handles mouse drag to rotate the camera view.
-
-### Key Bevy Concepts Used
-
-- `App`: The main application container
-- `DefaultPlugins`: Collection of essential Bevy plugins
-- `Commands`: Used to spawn entities
-- `ResMut`: Mutable resource access (for assets like meshes and materials)
-- `Query`: Used to find and modify entities with specific components
-- `Res<Time>`: Access to time information for animations
-- `ButtonInput<MouseButton>`: Mouse button input handling
-- `Transform`: Position, rotation, and scale of entities
-- `Camera3dBundle`: Static 3D camera with perspective projection
-- `MaterialMeshBundle`: 3D mesh rendering with materials
-- Quaternion math for 3D rotations
-- Multiple entity systems running in sequence with `.chain()`
-
-## Running Tests
-
-```bash
-cargo test
-```
-
-## Controls
-
-- **Left Mouse Button + Drag**: Rotate the cube
-  - Horizontal movement (left/right): Rotate around Y axis (yaw)
-  - Vertical movement (up/down): Rotate around X axis (pitch)
-- The cube always spins end-over-end around its local Z-axis
-- Your manual rotations change the cube's orientation, which changes how the spin appears in world space
+1. Create a new directory under `src/` (e.g., `src/example_02_my_example/`)
+2. Add a `mod.rs` file with your example implementation
+3. Export the example module in `src/lib.rs`
+4. Update `src/main.rs` to run your example (or add a way to select examples)
 
 ## License
 
-This project is open source. Feel free to use it as a starting point for your own Bevy projects.
+This project is open source. Feel free to use it as a reference for your own Bevy projects.
 
 ## Resources
 
