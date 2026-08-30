@@ -14,8 +14,6 @@ pub struct Slider {
     pub max: f32,
     /// Current value
     pub value: f32,
-    /// Step for incremental changes
-    pub step: f32,
     /// Track width for position calculations
     pub track_width: f32,
 }
@@ -26,7 +24,6 @@ impl Default for Slider {
             min: 0.0,
             max: 1.0,
             value: 0.5,
-            step: 0.01,
             track_width: 200.0,
         }
     }
@@ -39,7 +36,6 @@ impl Slider {
             min,
             max,
             value: value.clamp(min, max),
-            step: (max - min) / 100.0,
             track_width: 200.0,
         }
     }
