@@ -1,12 +1,11 @@
-//! Bevy Hello World - Rotating Rectangle Example
+//! Bevy Hello World - Rotating Cube Example
 //!
 //! This library contains the core application logic for a simple Bevy
-//! application that displays a spinning cube that can be viewed from
+//! application that displays a spinning 3D cube that can be viewed from
 //! different angles by dragging the mouse in 3D space.
 
 use bevy::prelude::*;
-use bevy::math::primitives::Rectangle;
-use bevy::sprite::MaterialMesh2dBundle;
+use bevy::pbr::MaterialMeshBundle;
 use bevy::window::PrimaryWindow;
 
 /// Marker component for the spinning cube entity
@@ -32,7 +31,7 @@ impl Default for OrbitCamera {
         Self {
             distance: 5.0,
             is_dragging: false,
-            initial_pitch: 0.0,
+            initial_pitch: 0.5,
             initial_yaw: 0.0,
             initial_mouse_pos: Vec2::ZERO,
         }
@@ -43,13 +42,16 @@ impl Default for OrbitCamera {
 pub fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // Spawn the spinning cube at the origin
+    // Spawn the spinning cube at the origin with a proper 3D mesh
     commands.spawn((
-        MaterialMesh2dBundle {
-            mesh: meshes.add(Mesh::from(Rectangle::new(1.0, 1.0))).into(),
-            material: materials.add(ColorMaterial::from(Color::srgb(0.2, 0.4, 0.8))),
+        MaterialMeshBundle::<StandardMaterial> {
+            mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
+            material: materials.add(StandardMaterial {
+                base_color: Color::srgb(0.2, 0.4, 0.8),
+                ..default()
+            }),
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
             ..default()
         },
@@ -156,21 +158,21 @@ mod tests {
         let _ = app;
     }
 
-    /// Test that Rectangle can be created with correct dimensions
+    /// Test that Cuboid can be created with correct dimensions
     #[test]
-    fn test_rectangle_creation() {
-        let rectangle = Rectangle::new(1.0, 1.0);
-        assert_eq!(rectangle.half_size, Vec2::new(0.5, 0.5));
+    fn test_cuboid_creation() {
+        let cuboid = Cuboid::new(1.0, 1.0, 1.0);
+        assert_eq!(cuboid.half_size, Vec3::new(0.5, 0.5, 0.5));
     }
 
-    /// Test that Rectangle with different dimensions works correctly
+    /// Test that Cuboid with different dimensions works correctly
     #[test]
-    fn test_rectangle_various_sizes() {
-        let rect1 = Rectangle::new(2.0, 1.0);
-        assert_eq!(rect1.half_size, Vec2::new(1.0, 0.5));
+    fn test_cuboid_various_sizes() {
+        let cuboid1 = Cuboid::new(2.0, 1.0, 0.5);
+        assert_eq!(cuboid1.half_size, Vec3::new(1.0, 0.5, 0.25));
         
-        let rect2 = Rectangle::new(0.5, 0.25);
-        assert_eq!(rect2.half_size, Vec2::new(0.25, 0.125));
+        let cuboid2 = Cuboid::new(0.5, 0.25, 0.125);
+        assert_eq!(cuboid2.half_size, Vec3::new(0.25, 0.125, 0.0625));
     }
 
     /// Test that color is created correctly
@@ -214,11 +216,11 @@ mod tests {
         assert_ne!(transform.rotation, Quat::IDENTITY);
     }
 
-    /// Test that mesh can be created from rectangle
+    /// Test that mesh can be created from cuboid
     #[test]
-    fn test_mesh_from_rectangle() {
-        let rectangle = Rectangle::new(1.0, 1.0);
-        let mesh = Mesh::from(rectangle);
+    fn test_mesh_from_cuboid() {
+        let cuboid = Cuboid::new(1.0, 1.0, 1.0);
+        let mesh = Mesh::from(cuboid);
         
         // Mesh should have vertices
         assert!(mesh.count_vertices() > 0);
@@ -237,7 +239,7 @@ mod tests {
     fn test_orbit_camera_default() {
         let camera = OrbitCamera::default();
         assert!(!camera.is_dragging);
-        assert_eq!(camera.initial_pitch, 0.0);
+        assert_eq!(camera.initial_pitch, 0.5);
         assert_eq!(camera.initial_yaw, 0.0);
         assert_eq!(camera.initial_mouse_pos, Vec2::ZERO);
         assert_eq!(camera.distance, 5.0);

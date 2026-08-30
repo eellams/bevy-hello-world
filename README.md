@@ -8,13 +8,14 @@ This is a basic Bevy game engine example that renders a blue rectangle that cont
 
 ## Features
 
-- Bevy 0.14
-- 3D rendering with a spinning rectangle
+- Bevy 0.14 with PBR rendering
+- 3D rendering with a proper cube mesh
 - Simple ECS architecture with components and systems
 - Cube spins on all three axes (X, Y, Z) at different rates
 - **Drag to orbit**: Click and drag to rotate your 3D view around the cube
-- Full 3-axis camera rotation: horizontal (yaw) and vertical (pitch)
+- Full 2-axis camera rotation: horizontal (yaw) and vertical (pitch)
 - The cube always spins the same way from its own perspective
+- Proper lighting and materials for 3D visualization
 
 ## Prerequisites
 
