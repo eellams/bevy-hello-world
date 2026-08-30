@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.14", default-features = false, features = [
+bevy = { version = "0.19.1", default-features = false, features = [
     "bevy_asset",
     "bevy_sprite",
     "bevy_winit",
@@ -12,8 +12,11 @@ bevy = { version = "0.14", default-features = false, features = [
     "bevy_core_pipeline",
     "bevy_ui",
     "bevy_text",
+    "bevy_pbr",
+    "tonemapping_luts",
     "png",
     "x11",
+    "zstd_rust",
 ] }
 
 [[bin]]
