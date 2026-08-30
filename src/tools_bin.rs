@@ -17,23 +17,27 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // 3D Camera - renders the cube (order 0 = default, renders first)
+    // 3D Camera - renders the cube (order -1 = render first)
     commands.spawn((
+        Camera {
+            order: -1,
+            clear_color: ClearColorConfig::Custom(Color::srgb(0.1, 0.1, 0.1)),
+            ..default()
+        },
         Camera3d::default(),
         Transform::from_xyz(0.0, 0.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
         Name::new("3D Camera"),
     ));
     
-    // 2D Camera for UI overlay - order 1 = renders after 3D
-    // Don't clear the screen, render on top
+    // 2D Camera for UI overlay - order 0 = renders after 3D
+    // Don't clear, render on top of 3D
     commands.spawn((
         Camera {
-            order: 1,
+            order: 0,
             clear_color: ClearColorConfig::None,
             ..default()
         },
         Camera2d,
-        Transform::from_xyz(0.0, 0.0, 10.0),
         Name::new("UI Camera"),
     ));
     
@@ -61,6 +65,7 @@ fn setup(
     ));
     
     // UI Panel - using bevy_ui Node
+    // Positioned in screen space (2D coordinates)
     commands.spawn((
         Node {
             flex_direction: FlexDirection::Column,
