@@ -12,7 +12,7 @@ use crate::tools::shaders::testing::{setup_shader_testing_framework, shader_swit
 use crate::tools::shaders::library::{shader_hot_reload_system, load_shaders_from_directory, ShaderCompilationEvent, ShaderLibraryResource};
 
 // Import our new slider
-use crate::tools::gui::slider::{SliderValueChanged, SliderWithDisplayBundle, update_slider_handle_positions, apply_slider_value_changes, update_slider_display_text};
+use crate::tools::gui::{SliderValueChanged, spawn_slider, update_slider_handle_positions, apply_slider_value_changes, slider_interaction_system};
 
 fn main() {
     App::new()
@@ -30,9 +30,9 @@ fn main() {
             setup_ui,
         ))
         .add_systems(Update, (
+            slider_interaction_system,
             update_slider_handle_positions,
             apply_slider_value_changes,
-            update_slider_display_text,
             update_shader_parameters_system,
             shader_switching_system,
             update_shader_test_entities,
@@ -143,10 +143,8 @@ fn setup_ui(
             Text::new(format!("Param {}:", i + 1)),
         ));
         
-        // Slider with display
-        commands.spawn((
-            SliderWithDisplayBundle::new(0.0, 1.0, 0.5),
-        ));
+        // Slider with display - spawn as separate entities to avoid bundle conflicts
+        spawn_slider(&mut commands, 0.0, 1.0, 0.5);
     }
 
     // Toggle button example using bevy_ui

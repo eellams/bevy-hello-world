@@ -44,17 +44,6 @@ impl Slider {
         }
     }
 
-    /// Create a new slider with explicit step
-    pub fn with_step(min: f32, max: f32, value: f32, step: f32) -> Self {
-        Self {
-            min,
-            max,
-            value: value.clamp(min, max),
-            step,
-            track_width: 200.0,
-        }
-    }
-
     /// Get the normalized value (0.0 to 1.0)
     pub fn normalized(&self) -> f32 {
         if self.max == self.min {
@@ -88,96 +77,58 @@ pub struct SliderValueChanged {
 #[derive(Component, Debug)]
 pub struct SliderHandle;
 
-/// Bundle for creating a slider handle
-#[derive(Bundle)]
-pub struct SliderHandleBundle {
-    pub node: Node,
-    pub background_color: BackgroundColor,
-    pub handle: SliderHandle,
-}
+/// Spawn a complete slider as an entity hierarchy.
+/// Creates a container node with a track and handle as children.
+/// Returns the entity of the slider container.
+pub fn spawn_slider(
+    commands: &mut Commands,
+    min: f32,
+    max: f32,
+    value: f32,
+) -> Entity {
+    let slider = Slider::new(min, max, value);
+    let position = slider.handle_position();
+    let track_width = slider.track_width;
 
-impl Default for SliderHandleBundle {
-    fn default() -> Self {
-        Self {
-            node: Node {
-                width: Val::Px(20.0),
-                height: Val::Px(20.0),
-                position_type: PositionType::Absolute,
-                left: Val::Px(95.0), // Center position (50% - 10px)
-                top: Val::Px(10.0),
-                ..default()
-            },
-            background_color: BackgroundColor(Color::srgb(0.6, 0.6, 0.6)),
-            handle: SliderHandle,
-        }
-    }
-}
+    // Spawn the container with the Slider component
+    let container = commands.spawn((
+        Node {
+            width: Val::Px(track_width),
+            height: Val::Px(40.0),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
+        slider,
+    )).id();
 
-/// Bundle for creating a complete slider
-#[derive(Bundle)]
-pub struct SliderBundle {
-    /// The container node
-    pub node: Node,
-    /// The track (background bar)
-    pub track: Node,
-    pub track_background: BackgroundColor,
-    /// The handle (draggable part)
-    pub handle: SliderHandleBundle,
-    /// Slider configuration
-    pub slider: Slider,
-}
+    // Spawn the track as a child
+    commands.spawn((
+        Node {
+            width: Val::Px(track_width),
+            height: Val::Px(8.0),
+            ..default()
+        },
+        BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
+    ));
 
-impl Default for SliderBundle {
-    fn default() -> Self {
-        Self {
-            node: Node {
-                width: Val::Px(200.0),
-                height: Val::Px(40.0),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            track: Node {
-                width: Val::Px(200.0),
-                height: Val::Px(8.0),
-                ..default()
-            },
-            track_background: BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
-            handle: SliderHandleBundle::default(),
-            slider: Slider::default(),
-        }
-    }
-}
+    // Spawn the handle as a child with interaction components
+    commands.spawn((
+        Node {
+            width: Val::Px(20.0),
+            height: Val::Px(20.0),
+            position_type: PositionType::Absolute,
+            left: Val::Px(position),
+            top: Val::Px(10.0),
+            ..default()
+        },
+        BackgroundColor(Color::srgb(0.6, 0.6, 0.6)),
+        SliderHandle,
+        Interaction::None,
+    ));
 
-impl SliderBundle {
-    /// Create a new slider with the given range and initial value
-    pub fn new(min: f32, max: f32, value: f32) -> Self {
-        let mut bundle = Self::default();
-        bundle.slider = Slider::new(min, max, value);
-        let position = bundle.slider.handle_position();
-        bundle.handle.node.left = Val::Px(position);
-        bundle
-    }
-
-    /// Create a new slider with explicit step
-    pub fn with_step(min: f32, max: f32, value: f32, step: f32) -> Self {
-        let mut bundle = Self::default();
-        bundle.slider = Slider::with_step(min, max, value, step);
-        let position = bundle.slider.handle_position();
-        bundle.handle.node.left = Val::Px(position);
-        bundle
-    }
-
-    /// Set the width of the slider
-    pub fn with_width(mut self, width: f32) -> Self {
-        self.node.width = Val::Px(width);
-        self.track.width = Val::Px(width);
-        self.slider.track_width = width;
-        let position = self.slider.handle_position();
-        self.handle.node.left = Val::Px(position);
-        self
-    }
+    container
 }
 
 /// System to update slider handle position when value changes
@@ -209,7 +160,7 @@ pub fn slider_interaction_system(
         &Children,
         &mut BackgroundColor,
     ), (
-        With<Slider>,
+        With<SliderHandle>,
         Changed<Interaction>,
     )>,
     handle_query: Query<&SliderHandle>,
@@ -271,68 +222,5 @@ pub fn apply_slider_value_changes(
         if let Ok(mut slider) = slider_query.get_mut(event.entity) {
             slider.set(event.value);
         }
-    }
-}
-
-/// Bundle for a slider with a text display
-#[derive(Bundle)]
-pub struct SliderWithDisplayBundle {
-    /// The container node
-    pub node: Node,
-    /// The track (background bar)
-    pub track: Node,
-    pub track_background: BackgroundColor,
-    /// The handle (draggable part)
-    pub handle: SliderHandleBundle,
-    /// Slider configuration
-    pub slider: Slider,
-    /// Text display for the value
-    pub display: Text,
-}
-
-impl SliderWithDisplayBundle {
-    pub fn new(min: f32, max: f32, value: f32) -> Self {
-        let slider = Slider::new(min, max, value);
-        let position = slider.handle_position();
-        
-        Self {
-            node: Node {
-                width: Val::Px(200.0),
-                height: Val::Px(40.0),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            track: Node {
-                width: Val::Px(200.0),
-                height: Val::Px(8.0),
-                ..default()
-            },
-            track_background: BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
-            handle: SliderHandleBundle {
-                node: Node {
-                    width: Val::Px(20.0),
-                    height: Val::Px(20.0),
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(position),
-                    top: Val::Px(10.0),
-                    ..default()
-                },
-                background_color: BackgroundColor(Color::srgb(0.6, 0.6, 0.6)),
-                handle: SliderHandle,
-            },
-            slider,
-            display: Text::new(format!("{:.2}", value)),
-        }
-    }
-}
-
-/// System to update slider display text when value changes
-pub fn update_slider_display_text(
-    mut query: Query<(&Slider, &mut Text)>, 
-) {
-    for (slider, mut text) in &mut query {
-        *text = Text::new(format!("{:.2}", slider.value));
     }
 }
