@@ -12,6 +12,8 @@ This is a basic Bevy game engine example that renders a blue rectangle rotating 
 - 2D rendering with a rotating rectangle
 - Simple ECS architecture with components and systems
 - Time-based rotation for smooth animation
+- **Drag-to-rotate**: Click and drag the rectangle to rotate it manually
+- Auto-rotation when not being dragged
 
 ## Prerequisites
 
@@ -33,7 +35,7 @@ cd bevy-hello-world
 cargo run
 ```
 
-This will compile and run the application, opening a window with a rotating blue rectangle.
+This will compile and run the application, opening a window with a rotating blue rectangle. Click and drag the rectangle to rotate it manually, or let it auto-rotate.
 
 ### Build for release
 
@@ -72,6 +74,8 @@ The application uses Bevy's ECS (Entity Component System) architecture:
 - `ResMut`: Mutable resource access (for assets like meshes and materials)
 - `Query`: Used to find and modify entities with specific components
 - `Res<Time>`: Access to time information for animations
+- `ButtonInput<MouseButton>`: Mouse button input handling
+- `GlobalTransform`: Access to entity's global position for hit detection
 
 ## Running Tests
 

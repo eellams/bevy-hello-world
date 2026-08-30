@@ -1,15 +1,38 @@
 //! Bevy Hello World - Rotating Rectangle Example
 //!
 //! This library contains the core application logic for a simple Bevy
-//! application that displays a rotating rectangle.
+//! application that displays a rotating rectangle that can be dragged
+//! to rotate with the mouse.
 
 use bevy::prelude::*;
 use bevy::math::primitives::Rectangle;
 use bevy::sprite::MaterialMesh2dBundle;
+use bevy::window::PrimaryWindow;
 
 /// Marker component for the rotating rectangle entity
 #[derive(Component)]
 pub struct RotatingCube;
+
+/// Component to store the rotation state and drag information
+#[derive(Component)]
+pub struct RotationState {
+    /// Whether the rectangle is currently being dragged
+    pub is_dragging: bool,
+    /// The initial angle when dragging started
+    pub initial_angle: f32,
+    /// The initial mouse position when dragging started
+    pub initial_mouse_pos: Vec2,
+}
+
+impl Default for RotationState {
+    fn default() -> Self {
+        Self {
+            is_dragging: false,
+            initial_angle: 0.0,
+            initial_mouse_pos: Vec2::ZERO,
+        }
+    }
+}
 
 /// System to set up the initial scene with camera and rectangle
 pub fn setup(
@@ -20,7 +43,7 @@ pub fn setup(
     // Spawn a camera
     commands.spawn(Camera2dBundle::default());
 
-    // Spawn the rotating rectangle
+    // Spawn the rotating rectangle with rotation state
     commands.spawn((
         MaterialMesh2dBundle {
             mesh: meshes.add(Mesh::from(Rectangle::new(100.0, 100.0))).into(),
@@ -29,13 +52,64 @@ pub fn setup(
             ..default()
         },
         RotatingCube,
+        RotationState::default(),
     ));
 }
 
-/// System to rotate the rectangle based on elapsed time
-pub fn rotate_cube(time: Res<Time>, mut query: Query<&mut Transform, With<RotatingCube>>) {
-    for mut transform in &mut query {
-        transform.rotation = Quat::from_rotation_z(time.elapsed_seconds());
+/// System to handle mouse input for drag-to-rotate
+pub fn handle_drag_rotation(
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mouse_button_input: Res<ButtonInput<MouseButton>>,
+    mut query: Query<(&mut Transform, &mut RotationState, &GlobalTransform), With<RotatingCube>>,
+) {
+    let window = windows.single();
+    
+    if let Some(mouse_pos) = window.cursor_position() {
+        for (mut transform, mut state, global_transform) in &mut query {
+            // Check if mouse is over the rectangle
+            let rectangle_size = Vec2::new(100.0, 100.0);
+            let rectangle_pos = global_transform.translation().truncate();
+            
+            // Simple AABB check for mouse over rectangle
+            let half_size = rectangle_size / 2.0;
+            let is_over = mouse_pos.x >= rectangle_pos.x - half_size.x
+                && mouse_pos.x <= rectangle_pos.x + half_size.x
+                && mouse_pos.y >= rectangle_pos.y - half_size.y
+                && mouse_pos.y <= rectangle_pos.y + half_size.y;
+            
+            // Start dragging when mouse button is pressed over the rectangle
+            if is_over && mouse_button_input.pressed(MouseButton::Left) && !state.is_dragging {
+                state.is_dragging = true;
+                state.initial_angle = transform.rotation.to_euler(EulerRot::ZXY).0; // Z rotation
+                state.initial_mouse_pos = mouse_pos;
+            }
+            
+            // Stop dragging when mouse button is released
+            if !mouse_button_input.pressed(MouseButton::Left) && state.is_dragging {
+                state.is_dragging = false;
+            }
+            
+            // If dragging, calculate rotation based on mouse movement
+            if state.is_dragging {
+                let mouse_delta = mouse_pos - state.initial_mouse_pos;
+                // Calculate angle from mouse movement relative to center
+                let angle = mouse_delta.x * 0.01; // Scale factor for rotation speed
+                transform.rotation = Quat::from_rotation_z(state.initial_angle + angle);
+            }
+        }
+    }
+}
+
+/// System to rotate the rectangle automatically when not being dragged
+pub fn rotate_cube(
+    time: Res<Time>,
+    mut query: Query<(&mut Transform, &RotationState), With<RotatingCube>>,
+) {
+    for (mut transform, state) in &mut query {
+        // Only auto-rotate if not being dragged
+        if !state.is_dragging {
+            transform.rotation = Quat::from_rotation_z(time.elapsed_seconds());
+        }
     }
 }
 
@@ -44,7 +118,7 @@ pub fn run_app() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, rotate_cube)
+        .add_systems(Update, (handle_drag_rotation, rotate_cube).chain())
         .run();
 }
 
@@ -59,7 +133,7 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
             .add_systems(Startup, setup)
-            .add_systems(Update, rotate_cube);
+            .add_systems(Update, (handle_drag_rotation, rotate_cube).chain());
         
         // The app should be created successfully - just verify it doesn't panic
         let _ = app;
@@ -110,7 +184,7 @@ mod tests {
         // This is a compile-time test that the rotate_cube function
         // has the correct signature for a Bevy system
         // The test passes if it compiles
-        let _: fn(Res<Time>, Query<&mut Transform, With<RotatingCube>>) = rotate_cube;
+        let _: fn(Res<Time>, Query<(&mut Transform, &RotationState), With<RotatingCube>>) = rotate_cube;
     }
 
     /// Test that Transform rotation works as expected
@@ -140,5 +214,62 @@ mod tests {
         let component = RotatingCube;
         // Just verify it can be created
         let _ = component;
+    }
+
+    /// Test that RotationState component can be created with defaults
+    #[test]
+    fn test_rotation_state_default() {
+        let state = RotationState::default();
+        assert!(!state.is_dragging);
+        assert_eq!(state.initial_angle, 0.0);
+        assert_eq!(state.initial_mouse_pos, Vec2::ZERO);
+    }
+
+    /// Test that RotationState can be created with custom values
+    #[test]
+    fn test_rotation_state_custom() {
+        let state = RotationState {
+            is_dragging: true,
+            initial_angle: std::f32::consts::PI,
+            initial_mouse_pos: Vec2::new(100.0, 200.0),
+        };
+        assert!(state.is_dragging);
+        assert_eq!(state.initial_angle, std::f32::consts::PI);
+        assert_eq!(state.initial_mouse_pos, Vec2::new(100.0, 200.0));
+    }
+
+    /// Test mouse over detection logic
+    #[test]
+    fn test_mouse_over_detection() {
+        let rectangle_pos = Vec2::new(0.0, 0.0);
+        let rectangle_size = Vec2::new(100.0, 100.0);
+        let half_size = rectangle_size / 2.0;
+        
+        // Test mouse at center - should be over
+        let mouse_at_center = Vec2::new(0.0, 0.0);
+        let is_over_center = mouse_at_center.x >= rectangle_pos.x - half_size.x
+            && mouse_at_center.x <= rectangle_pos.x + half_size.x
+            && mouse_at_center.y >= rectangle_pos.y - half_size.y
+            && mouse_at_center.y <= rectangle_pos.y + half_size.y;
+        assert!(is_over_center);
+        
+        // Test mouse far away - should not be over
+        let mouse_far_away = Vec2::new(1000.0, 1000.0);
+        let is_over_far = mouse_far_away.x >= rectangle_pos.x - half_size.x
+            && mouse_far_away.x <= rectangle_pos.x + half_size.x
+            && mouse_far_away.y >= rectangle_pos.y - half_size.y
+            && mouse_far_away.y <= rectangle_pos.y + half_size.y;
+        assert!(!is_over_far);
+    }
+
+    /// Test that handle_drag_rotation system has the correct signature
+    #[test]
+    fn test_handle_drag_rotation_signature() {
+        // Compile-time test for system signature
+        let _: fn(
+            Query<&Window, With<PrimaryWindow>>,
+            Res<ButtonInput<MouseButton>>,
+            Query<(&mut Transform, &mut RotationState, &GlobalTransform), With<RotatingCube>>
+        ) = handle_drag_rotation;
     }
 }
