@@ -111,14 +111,14 @@ pub fn setup_shader_testing_framework(
     geometry_library.add_geometry(Vec2::new(200.0, 200.0));
     geometry_library.add_geometry(Vec2::new(200.0, 200.0));
 
-    // Spawn shader test entity
+    // Spawn shader test entity - a large colored quad in the center
     commands.spawn((
         Sprite {
-            color: Color::srgb(0.2, 0.4, 0.8),
-            custom_size: Some(Vec2::new(200.0, 200.0)),
+            color: Color::srgb(0.8, 0.2, 0.4),
+            custom_size: Some(Vec2::new(400.0, 400.0)),
             ..default()
         },
-        Transform::default(),
+        Transform::from_xyz(0.0, 0.0, 0.0),
         GlobalTransform::default(),
         ShaderTestEntity,
     ));

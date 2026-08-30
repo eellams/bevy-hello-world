@@ -55,7 +55,7 @@ fn setup_ui(
     mut commands: Commands,
 ) {
     // Main control panel using bevy_ui Node
-    commands.spawn((
+    let _panel = commands.spawn((
         Node {
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
@@ -64,106 +64,145 @@ fn setup_ui(
             position_type: PositionType::Absolute,
             left: Val::Px(10.0),
             top: Val::Px(10.0),
+            width: Val::Px(250.0),
             ..default()
         },
         BackgroundColor(Color::srgb(0.15, 0.15, 0.15)),
         Name::new("Control Panel"),
-    ));
+    )).id();
 
     // Panel title
     commands.spawn((
-        Text::new("Shader Testing Framework"),
+        Text2d::new("Shader Testing Framework"),
+        TextColor(Color::WHITE),
+        TextFont::default(),
+        Node {
+            margin: UiRect::bottom(Val::Px(15.0)),
+            ..default()
+        },
         Name::new("Title"),
     ));
 
-    // Shader selection buttons using bevy_ui Button
+    // Shader selection buttons row
+    let _button_row = commands.spawn((
+        Node {
+            flex_direction: FlexDirection::Row,
+            margin: UiRect::bottom(Val::Px(10.0)),
+            ..default()
+        },
+    )).id();
+
+    // Previous Shader Button
     commands.spawn((
         Button,
         Node {
-            width: Val::Px(120.0),
-            height: Val::Px(40.0),
+            width: Val::Px(100.0),
+            height: Val::Px(30.0),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
-            margin: UiRect::all(Val::Px(5.0)),
+            margin: UiRect::right(Val::Px(10.0)),
             ..default()
         },
         BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
+        Text2d::new("Prev Shader"),
+        TextColor(Color::WHITE),
         Name::new("Previous Shader Button"),
     ));
 
+    // Next Shader Button
     commands.spawn((
         Button,
         Node {
-            width: Val::Px(120.0),
-            height: Val::Px(40.0),
+            width: Val::Px(100.0),
+            height: Val::Px(30.0),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
-            margin: UiRect::all(Val::Px(5.0)),
             ..default()
         },
         BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
+        Text2d::new("Next Shader"),
+        TextColor(Color::WHITE),
         Name::new("Next Shader Button"),
     ));
 
-    // Geometry selection buttons
+    // Geometry selection buttons row
+    let _geometry_row = commands.spawn((
+        Node {
+            flex_direction: FlexDirection::Row,
+            margin: UiRect::bottom(Val::Px(10.0)),
+            ..default()
+        },
+    )).id();
+
+    // Previous Geometry Button
     commands.spawn((
         Button,
         Node {
-            width: Val::Px(120.0),
-            height: Val::Px(40.0),
+            width: Val::Px(100.0),
+            height: Val::Px(30.0),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
-            margin: UiRect::all(Val::Px(5.0)),
+            margin: UiRect::right(Val::Px(10.0)),
             ..default()
         },
         BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
+        Text2d::new("Prev Geo"),
+        TextColor(Color::WHITE),
         Name::new("Previous Geometry Button"),
     ));
 
+    // Next Geometry Button
     commands.spawn((
         Button,
         Node {
-            width: Val::Px(120.0),
-            height: Val::Px(40.0),
+            width: Val::Px(100.0),
+            height: Val::Px(30.0),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
-            margin: UiRect::all(Val::Px(5.0)),
             ..default()
         },
         BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
+        Text2d::new("Next Geo"),
+        TextColor(Color::WHITE),
         Name::new("Next Geometry Button"),
     ));
 
-    // Shader parameter sliders
-    let param_names = vec!["Param1", "Param2", "Param3", "Param4"];
+    // Shader parameter sliders - each in its own row
+    let param_names = vec!["Red", "Green", "Blue", "Alpha"];
     
-    for (i, _name) in param_names.iter().enumerate() {
+    for (i, name) in param_names.iter().enumerate() {
+        let _slider_row = commands.spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                margin: UiRect::bottom(Val::Px(5.0)),
+                ..default()
+            },
+        )).id();
+        
         // Slider label
         commands.spawn((
-            Text::new(format!("Param {}:", i + 1)),
+            Text2d::new(format!("{}:", name)),
+            TextColor(Color::WHITE),
+            Node {
+                width: Val::Px(50.0),
+                ..default()
+            },
         ));
         
         // Slider with display - spawn as separate entities to avoid bundle conflicts
-        spawn_slider(&mut commands, 0.0, 1.0, 0.5);
+        spawn_slider(&mut commands, 0.0, 1.0, if i == 0 { 1.0 } else if i == 1 { 0.5 } else if i == 2 { 0.3 } else { 1.0 });
     }
-
-    // Toggle button example using bevy_ui
-    commands.spawn((
-        Button,
-        Node {
-            width: Val::Px(120.0),
-            height: Val::Px(40.0),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            margin: UiRect::all(Val::Px(5.0)),
-            ..default()
-        },
-        BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
-        Name::new("Toggle Button"),
-    ));
 
     // Information display
     commands.spawn((
-        Text::new("Use arrow keys to switch shaders/geometries\nClick and drag sliders to adjust values"),
+        Text2d::new("Use arrow keys to switch shaders/geometries\nClick and drag sliders to adjust RGB values"),
+        TextColor(Color::WHITE),
+        TextFont::default().with_font_size(12.0),
+        Node {
+            margin: UiRect::top(Val::Px(15.0)),
+            ..default()
+        },
+        Name::new("Info Text"),
     ));
 }
