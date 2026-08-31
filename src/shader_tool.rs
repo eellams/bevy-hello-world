@@ -29,28 +29,28 @@ use std::fs;
 pub struct ShaderToolMaterial {
     /// Base color uniform
     #[uniform(0)]
-    base_color: LinearRgba,
+    pub base_color: LinearRgba,
     /// Intensity uniform
     #[uniform(1)]
-    intensity: f32,
+    pub intensity: f32,
     /// Frequency uniform
     #[uniform(2)]
-    frequency: f32,
+    pub frequency: f32,
     /// Amplitude uniform
     #[uniform(3)]
-    amplitude: f32,
+    pub amplitude: f32,
     /// Direction uniform
     #[uniform(4)]
-    direction: Vec3,
+    pub direction: Vec3,
     /// Offset uniform
     #[uniform(5)]
-    offset: Vec3,
+    pub offset: Vec3,
     /// Accent color uniform
     #[uniform(6)]
-    accent_color: LinearRgba,
+    pub accent_color: LinearRgba,
     /// Time scale uniform
     #[uniform(7)]
-    time_scale: f32,
+    pub time_scale: f32,
 }
 
 impl Default for ShaderToolMaterial {
@@ -70,8 +70,8 @@ impl Default for ShaderToolMaterial {
 
 impl Material for ShaderToolMaterial {
     fn fragment_shader() -> ShaderRef {
-        // Use a default shader - will be overridden dynamically
-        "embedded://bevy-hello-world/shader_tool_default.wgsl".into()
+        // Use our custom shader
+        "shaders/shader_tool.wgsl".into()
     }
     
     fn alpha_mode(&self) -> AlphaMode {
@@ -84,17 +84,16 @@ impl Material for ShaderToolMaterial {
         layout: &MeshVertexBufferLayoutRef,
         _key: MaterialPipelineKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
-        // Configure the pipeline for our shader
+        // Get the vertex layout for the mesh
         let vertex_layout = layout.0.get_layout(&[
             Mesh::ATTRIBUTE_POSITION.at_shader_location(0),
             Mesh::ATTRIBUTE_NORMAL.at_shader_location(1),
             Mesh::ATTRIBUTE_UV_0.at_shader_location(2),
         ])?;
         
+        // Apply the vertex layout to the first buffer
         if let Some(vertex_buffer_layout) = descriptor.vertex.buffers.get_mut(0) {
             vertex_buffer_layout.attributes = vertex_layout.attributes;
-        } else {
-            return Ok(()); // Skip vertex buffer configuration for now
         }
         
         Ok(())
@@ -221,8 +220,7 @@ pub struct DetectedUniform {
     pub type_name: String,
     /// Category for UI grouping
     pub category: UniformCategory,
-    /// Default value as a string
-    pub default_value: String,
+
 }
 
 /// Category of uniform for UI organization
@@ -336,13 +334,11 @@ impl ShaderParameters {
             if let Some((name, type_name)) = extract_var_uniform(trimmed) {
                 if !self.detected_uniforms.iter().any(|u| u.name == name) {
                     let category = classify_uniform_type(&type_name);
-                    let default_value = get_default_value(&type_name);
                     
                     let uniform = DetectedUniform {
                         name: name.to_string(),
                         type_name: type_name.to_string(),
                         category,
-                        default_value,
                     };
                     
                     self.detected_uniforms.push(uniform);
@@ -353,13 +349,11 @@ impl ShaderParameters {
             else if let Some((name, type_name)) = extract_group_binding_var(trimmed) {
                 if !self.detected_uniforms.iter().any(|u| u.name == name) {
                     let category = classify_uniform_type(&type_name);
-                    let default_value = get_default_value(&type_name);
                     
                     let uniform = DetectedUniform {
                         name: name.to_string(),
                         type_name: type_name.to_string(),
                         category,
-                        default_value,
                     };
                     
                     self.detected_uniforms.push(uniform);
@@ -370,13 +364,11 @@ impl ShaderParameters {
             else if let Some((name, type_name)) = extract_group_binding_var_uniform(trimmed) {
                 if !self.detected_uniforms.iter().any(|u| u.name == name) {
                     let category = classify_uniform_type(&type_name);
-                    let default_value = get_default_value(&type_name);
                     
                     let uniform = DetectedUniform {
                         name: name.to_string(),
                         type_name: type_name.to_string(),
                         category,
-                        default_value,
                     };
                     
                     self.detected_uniforms.push(uniform);
@@ -612,6 +604,7 @@ impl ShaderEditorState {
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,
+    @location(1) normal: vec3<f32>,
 };
 
 @group(0) @binding(0)
@@ -648,6 +641,7 @@ fn vertex(
     var output: VertexOutput;
     output.position = projection * view * model * vec4<f32>(mesh.position, 1.0);
     output.uv = mesh.uv;
+    output.normal = mesh.normal;
     return output;
 }
 
@@ -745,6 +739,13 @@ pub struct ShaderTestEntity;
 #[derive(Component)]
 pub struct ToolCamera;
 
+/// Component to track the mesh material for the test entity
+#[derive(Component)]
+pub struct TestMeshMaterial {
+    pub mesh_handle: Handle<Mesh>,
+    pub material_handle: Handle<ShaderToolMaterial>,
+}
+
 /// Update material from parameters
 fn update_material_from_params(
     params: Res<ShaderParameters>,
@@ -778,7 +779,7 @@ fn setup_shader_tool(
     // Extract uniforms from the default shader
     params.extract_uniforms_from_shader(&editor.source_code);
     
-    // Create a temp file for the shader
+    // Create a temp file for the shader and load it
     if let Ok(temp_path) = editor.create_temp_file() {
         editor.temp_file = Some(temp_path.clone());
         state.current_shader = temp_path.display().to_string();
@@ -831,10 +832,14 @@ fn spawn_test_geometry(
     let material_handle = materials.add(material);
     
     commands.spawn((
-        Mesh3d(mesh_handle),
-        MeshMaterial3d(material_handle),
+        Mesh3d(mesh_handle.clone()),
+        MeshMaterial3d(material_handle.clone()),
         Transform::from_xyz(0.0, 0.0, 0.0),
         ShaderTestEntity,
+        TestMeshMaterial {
+            mesh_handle,
+            material_handle,
+        },
         Name::new("Shader Test Entity"),
     ));
 }
