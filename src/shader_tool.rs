@@ -3,6 +3,7 @@
 //! This module provides a comprehensive tool for testing and live-editing shaders with:
 //! - Shader loading and hot-reloading
 //! - Geometry switching (cube, sphere, plane, torus, etc.)
+//! - Automatic uniform detection from shader code
 //! - Parameter controls via egui sliders
 //! - Blender-like camera controls (orbit, pan, zoom)
 //! - Live shader code editor with file I/O
@@ -124,28 +125,359 @@ impl GeometryType {
     }
 }
 
+/// Detected uniform variable from shader code
+#[derive(Debug, Clone)]
+pub struct DetectedUniform {
+    /// Name of the uniform variable
+    pub name: String,
+    /// Type of the uniform (e.g., "f32", "vec3<f32>", "vec4<f32>")
+    pub type_name: String,
+    /// Category for UI grouping
+    pub category: UniformCategory,
+    /// Default value as a string
+    pub default_value: String,
+}
+
+/// Category of uniform for UI organization
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UniformCategory {
+    Scalar,
+    Vector,
+    Color,
+    Matrix,
+    Unknown,
+}
+
 /// Resource for shader parameters that can be tweaked via UI
 #[derive(Resource, Debug, Clone)]
 pub struct ShaderParameters {
-    /// Uniform values for the shader
-    pub uniforms: HashMap<String, f32>,
+    /// Uniform values for the shader (scalar values)
+    pub float_uniforms: HashMap<String, f32>,
+    /// Vector uniform values (vec2, vec3, vec4)
+    pub vector_uniforms: HashMap<String, Vec<f32>>,
     /// Color parameters
-    pub colors: HashMap<String, Color>,
+    pub color_uniforms: HashMap<String, Color>,
+    /// Detected uniforms from shader code
+    pub detected_uniforms: Vec<DetectedUniform>,
 }
 
 impl Default for ShaderParameters {
     fn default() -> Self {
-        let mut uniforms = HashMap::new();
-        uniforms.insert("time_scale".to_string(), 1.0);
-        uniforms.insert("intensity".to_string(), 1.0);
-        uniforms.insert("frequency".to_string(), 1.0);
-        uniforms.insert("amplitude".to_string(), 0.5);
+        let mut float_uniforms = HashMap::new();
+        float_uniforms.insert("time_scale".to_string(), 1.0);
+        float_uniforms.insert("intensity".to_string(), 1.0);
         
-        let mut colors = HashMap::new();
-        colors.insert("base_color".to_string(), Color::WHITE);
-        colors.insert("accent_color".to_string(), Color::srgb(0.8, 0.2, 0.4));
+        let mut vector_uniforms = HashMap::new();
+        vector_uniforms.insert("direction".to_string(), vec![0.0, 0.0, 1.0]);
         
-        Self { uniforms, colors }
+        let mut color_uniforms = HashMap::new();
+        color_uniforms.insert("base_color".to_string(), Color::srgb(0.8, 0.2, 0.4));
+        color_uniforms.insert("accent_color".to_string(), Color::srgb(0.2, 0.8, 0.4));
+        
+        Self {
+            float_uniforms,
+            vector_uniforms,
+            color_uniforms,
+            detected_uniforms: Vec::new(),
+        }
+    }
+}
+
+impl ShaderParameters {
+    /// Get a float uniform value, or return a default
+    pub fn get_float(&self, name: &str) -> f32 {
+        *self.float_uniforms.get(name).unwrap_or(&0.0)
+    }
+    
+    /// Set a float uniform value
+    pub fn set_float(&mut self, name: &str, value: f32) {
+        self.float_uniforms.insert(name.to_string(), value);
+    }
+    
+    /// Get a vector uniform value, or return a default
+    pub fn get_vector(&self, name: &str, size: usize) -> Vec<f32> {
+        self.vector_uniforms.get(name)
+            .map(|v| {
+                let mut result = vec![0.0; size];
+                for (i, &val) in v.iter().enumerate().take(size) {
+                    result[i] = val;
+                }
+                result
+            })
+            .unwrap_or_else(|| vec![0.0; size])
+    }
+    
+    /// Set a vector uniform value
+    pub fn set_vector(&mut self, name: &str, value: Vec<f32>) {
+        self.vector_uniforms.insert(name.to_string(), value);
+    }
+    
+    /// Get a color uniform value
+    pub fn get_color(&self, name: &str) -> Color {
+        *self.color_uniforms.get(name).unwrap_or(&Color::WHITE)
+    }
+    
+    /// Set a color uniform value
+    pub fn set_color(&mut self, name: &str, value: Color) {
+        self.color_uniforms.insert(name.to_string(), value);
+    }
+    
+    /// Clear detected uniforms and reset to defaults
+    pub fn clear_detected(&mut self) {
+        self.detected_uniforms.clear();
+        self.float_uniforms.clear();
+        self.vector_uniforms.clear();
+        self.color_uniforms.clear();
+    }
+    
+    /// Extract uniforms from shader code
+    pub fn extract_uniforms_from_shader(&mut self, shader_code: &str) {
+        self.clear_detected();
+        
+        // Simple string-based extraction of uniforms
+        // This looks for patterns like:
+        // @group(0) @binding(0) var<uniform> my_uniform: f32;
+        // @group(0) @binding(1) var my_color: vec4<f32>;
+        
+        for line in shader_code.lines() {
+            let trimmed = line.trim();
+            
+            // Skip comments and empty lines
+            if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("/*") {
+                continue;
+            }
+            
+            // Try to match: var<uniform> name: type;
+            if let Some((name, type_name)) = extract_var_uniform(trimmed) {
+                if !self.detected_uniforms.iter().any(|u| u.name == name) {
+                    let category = classify_uniform_type(&type_name);
+                    let default_value = get_default_value(&type_name);
+                    
+                    let uniform = DetectedUniform {
+                        name: name.to_string(),
+                        type_name: type_name.to_string(),
+                        category,
+                        default_value,
+                    };
+                    
+                    self.detected_uniforms.push(uniform);
+                    self.initialize_uniform(&type_name, &name);
+                }
+            }
+            // Try to match: @group(...) @binding(...) var name: type;
+            else if let Some((name, type_name)) = extract_group_binding_var(trimmed) {
+                if !self.detected_uniforms.iter().any(|u| u.name == name) {
+                    let category = classify_uniform_type(&type_name);
+                    let default_value = get_default_value(&type_name);
+                    
+                    let uniform = DetectedUniform {
+                        name: name.to_string(),
+                        type_name: type_name.to_string(),
+                        category,
+                        default_value,
+                    };
+                    
+                    self.detected_uniforms.push(uniform);
+                    self.initialize_uniform(&type_name, &name);
+                }
+            }
+            // Try to match: @group(...) @binding(...) var<uniform> name: type;
+            else if let Some((name, type_name)) = extract_group_binding_var_uniform(trimmed) {
+                if !self.detected_uniforms.iter().any(|u| u.name == name) {
+                    let category = classify_uniform_type(&type_name);
+                    let default_value = get_default_value(&type_name);
+                    
+                    let uniform = DetectedUniform {
+                        name: name.to_string(),
+                        type_name: type_name.to_string(),
+                        category,
+                        default_value,
+                    };
+                    
+                    self.detected_uniforms.push(uniform);
+                    self.initialize_uniform(&type_name, &name);
+                }
+            }
+        }
+        
+        // Sort uniforms by category for better UI organization
+        self.detected_uniforms.sort_by(|a, b| {
+            let a_order = uniform_category_order(&a.category);
+            let b_order = uniform_category_order(&b.category);
+            a_order.cmp(&b_order).then(a.name.cmp(&b.name))
+        });
+    }
+    
+    /// Initialize a uniform with appropriate default value based on type
+    fn initialize_uniform(&mut self, type_name: &str, name: &str) {
+        let type_lower = type_name.to_lowercase();
+        
+        if type_lower.contains("f32") && !type_lower.contains("vec") && !type_lower.contains("mat") {
+            // Scalar float
+            self.float_uniforms.insert(name.to_string(), 0.0);
+        } else if type_lower.contains("vec2") {
+            // 2D vector
+            self.vector_uniforms.insert(name.to_string(), vec![0.0, 0.0]);
+        } else if type_lower.contains("vec3") {
+            // 3D vector
+            self.vector_uniforms.insert(name.to_string(), vec![0.0, 0.0, 0.0]);
+        } else if type_lower.contains("vec4") {
+            // 4D vector - treat as color
+            self.color_uniforms.insert(name.to_string(), Color::srgba(0.0, 0.0, 0.0, 1.0));
+        } else if type_lower.contains("mat") {
+            // Matrix - store as flat vector
+            let size = if type_lower.contains("2x2") { 4 }
+                      else if type_lower.contains("3x3") { 9 }
+                      else if type_lower.contains("4x4") { 16 }
+                      else { 16 };
+            self.vector_uniforms.insert(name.to_string(), vec![0.0; size]);
+        }
+    }
+}
+
+/// Extract var<uniform> name: type from a line
+fn extract_var_uniform(line: &str) -> Option<(&str, &str)> {
+    // Pattern: var<uniform> name: type;
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    
+    for i in 0..parts.len().saturating_sub(2) {
+        if parts[i] == "var<uniform>" {
+            if i + 2 < parts.len() {
+                let name_part = parts[i + 1];
+                let type_part = parts[i + 2];
+                
+                // Clean up name (remove trailing colon if present)
+                let name = name_part.trim_end_matches(':');
+                // Clean up type (remove trailing semicolon if present)
+                let type_name = type_part.trim_end_matches(';');
+                
+                if !name.is_empty() && !type_name.is_empty() {
+                    return Some((name, type_name));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Extract @group(...) @binding(...) var name: type from a line
+fn extract_group_binding_var(line: &str) -> Option<(&str, &str)> {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    
+    let mut group_idx = None;
+    let mut binding_idx = None;
+    let mut var_idx = None;
+    
+    for (i, part) in parts.iter().enumerate() {
+        if part.starts_with("@group(") && part.ends_with(")") {
+            group_idx = Some(i);
+        } else if part.starts_with("@binding(") && part.ends_with(")") {
+            binding_idx = Some(i);
+        } else if *part == "var" {
+            var_idx = Some(i);
+        }
+    }
+    
+    if let (Some(_group_idx), Some(_binding_idx), Some(var_idx)) = (group_idx, binding_idx, var_idx) {
+        if var_idx + 2 < parts.len() {
+            let name_part = parts[var_idx + 1];
+            let type_part = parts[var_idx + 2];
+            
+            let name = name_part.trim_end_matches(':');
+            let type_name = type_part.trim_end_matches(';');
+            
+            if !name.is_empty() && !type_name.is_empty() {
+                return Some((name, type_name));
+            }
+        }
+    }
+    None
+}
+
+/// Extract @group(...) @binding(...) var<uniform> name: type from a line
+fn extract_group_binding_var_uniform(line: &str) -> Option<(&str, &str)> {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    
+    let mut group_idx = None;
+    let mut binding_idx = None;
+    let mut var_idx = None;
+    
+    for (i, part) in parts.iter().enumerate() {
+        if part.starts_with("@group(") && part.ends_with(")") {
+            group_idx = Some(i);
+        } else if part.starts_with("@binding(") && part.ends_with(")") {
+            binding_idx = Some(i);
+        } else if *part == "var<uniform>" {
+            var_idx = Some(i);
+        }
+    }
+    
+    if let (Some(_group_idx), Some(_binding_idx), Some(var_idx)) = (group_idx, binding_idx, var_idx) {
+        if var_idx + 2 < parts.len() {
+            let name_part = parts[var_idx + 1];
+            let type_part = parts[var_idx + 2];
+            
+            let name = name_part.trim_end_matches(':');
+            let type_name = type_part.trim_end_matches(';');
+            
+            if !name.is_empty() && !type_name.is_empty() {
+                return Some((name, type_name));
+            }
+        }
+    }
+    None
+}
+
+/// Classify uniform type into category
+fn classify_uniform_type(type_name: &str) -> UniformCategory {
+    let type_lower = type_name.to_lowercase();
+    
+    if type_lower.contains("vec4") {
+        UniformCategory::Color
+    } else if type_lower.contains("vec2") || type_lower.contains("vec3") {
+        UniformCategory::Vector
+    } else if type_lower.contains("mat") {
+        UniformCategory::Matrix
+    } else if type_lower.contains("f32") || type_lower.contains("i32") || type_lower.contains("u32") {
+        UniformCategory::Scalar
+    } else {
+        UniformCategory::Unknown
+    }
+}
+
+/// Get default value string for a type
+fn get_default_value(type_name: &str) -> String {
+    let type_lower = type_name.to_lowercase();
+    
+    if type_lower.contains("f32") && !type_lower.contains("vec") && !type_lower.contains("mat") {
+        "0.0".to_string()
+    } else if type_lower.contains("vec2") {
+        "vec2<f32>(0.0, 0.0)".to_string()
+    } else if type_lower.contains("vec3") {
+        "vec3<f32>(0.0, 0.0, 0.0)".to_string()
+    } else if type_lower.contains("vec4") {
+        "vec4<f32>(0.0, 0.0, 0.0, 1.0)".to_string()
+    } else if type_lower.contains("mat") {
+        if type_lower.contains("2x2") {
+            "mat2x2<f32>(...)".to_string()
+        } else if type_lower.contains("3x3") {
+            "mat3x3<f32>(...)".to_string()
+        } else {
+            "mat4x4<f32>(...)".to_string()
+        }
+    } else {
+        "0".to_string()
+    }
+}
+
+/// Get order for uniform category sorting
+fn uniform_category_order(category: &UniformCategory) -> u8 {
+    match category {
+        UniformCategory::Scalar => 0,
+        UniformCategory::Vector => 1,
+        UniformCategory::Color => 2,
+        UniformCategory::Matrix => 3,
+        UniformCategory::Unknown => 4,
     }
 }
 
@@ -182,8 +514,20 @@ impl Default for ShaderEditorState {
 impl ShaderEditorState {
     /// Create a new editor state with default shader code
     pub fn new() -> Self {
-        let default_shader = r#"// Default shader
+        // Default shader that uses uniforms
+        let default_shader = r#"// Default shader with uniforms
 // Edit this code and press "Apply" to see changes
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> base_color: vec4<f32>;
+
+@group(0) @binding(1)
+var<uniform> intensity: f32;
 
 @vertex
 fn vertex(
@@ -191,20 +535,16 @@ fn vertex(
     view: mat4x4<f32>,
     projection: mat4x4<f32>,
     mesh: mesh_data
-) -> vertex_output {
-    var output: vertex_output;
-    output.position = projection * view * model * mesh.position;
-    output.normal = mat3x3<f32>(model) * mesh.normal;
+) -> VertexOutput {
+    var output: VertexOutput;
+    output.position = projection * view * model * vec4<f32>(mesh.position, 1.0);
     output.uv = mesh.uv;
     return output;
 }
 
 @fragment
-fn fragment(mesh: mesh_data) -> fragment_output {
-    var output: fragment_output;
-    let base_color = vec4<f32>(0.8, 0.2, 0.4, 1.0);
-    output.color = base_color;
-    return output;
+fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
+    return base_color * intensity;
 }
 "#.to_string();
         
@@ -292,9 +632,13 @@ fn setup_shader_tool(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut state: ResMut<ShaderToolState>,
     mut editor: ResMut<ShaderEditorState>,
+    mut params: ResMut<ShaderParameters>,
 ) {
     // Initialize editor with default shader
     *editor = ShaderEditorState::new();
+    
+    // Extract uniforms from the default shader
+    params.extract_uniforms_from_shader(&editor.source_code);
     
     // Try to create a temp file for the default shader
     let _ = editor.create_temp_file();
@@ -333,11 +677,14 @@ fn setup_shader_tool(
     if !state.available_shaders.is_empty() {
         state.current_shader = state.available_shaders[0].clone();
         // Try to load the shader into the editor
-        if let Some(path) = state.available_shaders.first() {
-            if Path::new(path).exists() {
+        if let Some(path_str) = state.available_shaders.first() {
+            let path = Path::new(path_str);
+            if path.exists() {
                 let mut editor_mut = editor.clone();
-                let _ = editor_mut.load_from_file(Path::new(path));
+                let _ = editor_mut.load_from_file(path);
                 *editor = editor_mut;
+                // Extract uniforms from the loaded shader
+                params.extract_uniforms_from_shader(&editor.source_code);
             }
         }
     }
@@ -516,7 +863,7 @@ fn ui_system(
         // Main window
         egui::Window::new("Shader Testing Tool")
             .default_pos(egui::pos2(10.0, 10.0))
-            .default_size(egui::vec2(300.0, 500.0))
+            .default_size(egui::vec2(350.0, 600.0))
             .show(ctx, |ui| {
                 // Shader selection
                 ui.collapsing("Shaders", |ui| {
@@ -538,6 +885,8 @@ fn ui_system(
                                         let mut editor_mut = editor.clone();
                                         let _ = editor_mut.load_from_file(Path::new(&selected_shader));
                                         *editor = editor_mut;
+                                        // Extract uniforms from the loaded shader
+                                        params.extract_uniforms_from_shader(&editor.source_code);
                                     }
                                 }
                             }
@@ -549,6 +898,8 @@ fn ui_system(
                             let mut editor_mut = editor.clone();
                             let _ = editor_mut.load_from_file(path);
                             *editor = editor_mut;
+                            // Re-extract uniforms after reload
+                            params.extract_uniforms_from_shader(&editor.source_code);
                         }
                     }
                     
@@ -563,6 +914,8 @@ fn ui_system(
                                 let _ = editor_mut.load_from_file(&path);
                                 *editor = editor_mut;
                                 state.current_shader = path.display().to_string();
+                                // Extract uniforms from the opened shader
+                                params.extract_uniforms_from_shader(&editor.source_code);
                             }
                         }
                         
@@ -671,7 +1024,7 @@ fn ui_system(
                         *editor = editor_mut;
                     }
                     
-                    // Apply button
+                    // Apply button - validates and extracts uniforms
                     ui.horizontal(|ui| {
                         if ui.button("Apply Shader").clicked() {
                             // Validate and compile the shader
@@ -683,6 +1036,8 @@ fn ui_system(
                                         editor_mut.temp_file = Some(temp_path.clone());
                                         state.current_shader = temp_path.display().to_string();
                                     }
+                                    // Extract uniforms from the new shader
+                                    params.extract_uniforms_from_shader(&editor_mut.source_code);
                                 }
                                 Err(errs) => {
                                     eprintln!("Shader compilation failed: {:?}", errs);
@@ -699,32 +1054,108 @@ fn ui_system(
                 
                 ui.separator();
                 
-                // Parameters
-                ui.collapsing("Parameters", |ui| {
-                    ui.label("Uniform Parameters:");
+                // Detected Uniforms
+                if !params.detected_uniforms.is_empty() {
+                    // Collect uniform references first to avoid borrow issues
+                    let scalar_uniforms: Vec<DetectedUniform> = params.detected_uniforms.iter()
+                        .filter(|u| matches!(u.category, UniformCategory::Scalar))
+                        .cloned().collect();
+                    let vector_uniforms: Vec<DetectedUniform> = params.detected_uniforms.iter()
+                        .filter(|u| matches!(u.category, UniformCategory::Vector))
+                        .cloned().collect();
+                    let color_uniforms: Vec<DetectedUniform> = params.detected_uniforms.iter()
+                        .filter(|u| matches!(u.category, UniformCategory::Color))
+                        .cloned().collect();
+                    let matrix_uniforms: Vec<DetectedUniform> = params.detected_uniforms.iter()
+                        .filter(|u| matches!(u.category, UniformCategory::Matrix))
+                        .cloned().collect();
                     
-                    for (name, value) in params.uniforms.iter_mut() {
-                        if ui.add(egui::Slider::new(value, 0.0..=10.0).text(name)).changed() {
-                            // Value changed
+                    ui.collapsing("Detected Uniforms", |ui| {
+                        ui.label(format!("Found {} uniforms in shader:", params.detected_uniforms.len()));
+                        ui.separator();
+                        
+                        // Scalar uniforms
+                        if !scalar_uniforms.is_empty() {
+                            ui.label("Scalars:");
+                            for uniform in &scalar_uniforms {
+                                let mut value = params.float_uniforms.get(&uniform.name).copied().unwrap_or(0.0);
+                                if ui.add(egui::Slider::new(&mut value, -10.0..=10.0).text(&uniform.name)).changed() {
+                                    params.set_float(&uniform.name, value);
+                                }
+                            }
+                            ui.separator();
                         }
-                    }
-                    
-                    ui.separator();
-                    ui.label("Color Parameters:");
-                    
-                    for (name, color) in params.colors.iter_mut() {
-                        // Extract RGB values from Color
-                        let mut rgb = match color {
-                            Color::Srgba(s) => [s.red, s.green, s.blue],
-                            Color::LinearRgba(l) => [l.red, l.green, l.blue],
-                            _ => [0.0, 0.0, 0.0],
-                        };
-                        if ui.color_edit_button_rgb(&mut rgb).changed() {
-                            *color = Color::srgba(rgb[0], rgb[1], rgb[2], 1.0);
+                        
+                        // Vector uniforms
+                        if !vector_uniforms.is_empty() {
+                            ui.label("Vectors:");
+                            for uniform in &vector_uniforms {
+                                let size = if uniform.type_name.contains("vec2") { 2 }
+                                          else if uniform.type_name.contains("vec3") { 3 }
+                                          else { 4 };
+                                
+                                let mut value = params.get_vector(&uniform.name, size);
+                                
+                                if size == 2 {
+                                    ui.horizontal(|ui| {
+                                        ui.label(&uniform.name);
+                                        ui.add(egui::Slider::new(&mut value[0], -10.0..=10.0).text("X"));
+                                        ui.add(egui::Slider::new(&mut value[1], -10.0..=10.0).text("Y"));
+                                    });
+                                } else if size == 3 {
+                                    ui.horizontal(|ui| {
+                                        ui.label(&uniform.name);
+                                        ui.add(egui::Slider::new(&mut value[0], -10.0..=10.0).text("X"));
+                                        ui.add(egui::Slider::new(&mut value[1], -10.0..=10.0).text("Y"));
+                                        ui.add(egui::Slider::new(&mut value[2], -10.0..=10.0).text("Z"));
+                                    });
+                                }
+                                
+                                params.set_vector(&uniform.name, value);
+                            }
+                            ui.separator();
                         }
-                        ui.label(name);
-                    }
-                });
+                        
+                        // Color uniforms
+                        if !color_uniforms.is_empty() {
+                            ui.label("Colors:");
+                            for uniform in &color_uniforms {
+                                let mut color = params.get_color(&uniform.name);
+                                let mut rgb = match color {
+                                    Color::Srgba(s) => [s.red, s.green, s.blue],
+                                    Color::LinearRgba(l) => [l.red, l.green, l.blue],
+                                    _ => [0.0, 0.0, 0.0],
+                                };
+                                
+                                ui.horizontal(|ui| {
+                                    ui.label(&uniform.name);
+                                    if ui.color_edit_button_rgb(&mut rgb).changed() {
+                                        color = Color::srgba(rgb[0], rgb[1], rgb[2], 1.0);
+                                        params.set_color(&uniform.name, color);
+                                    }
+                                });
+                            }
+                            ui.separator();
+                        }
+                        
+                        // Matrix uniforms
+                        if !matrix_uniforms.is_empty() {
+                            ui.label("Matrices:");
+                            for uniform in &matrix_uniforms {
+                                ui.label(format!("{} ({})", uniform.name, uniform.type_name));
+                                ui.label("  (Matrix editing not yet implemented)");
+                            }
+                        }
+                    });
+                }
+                
+                // Legacy parameters section (kept for backwards compatibility)
+                if params.detected_uniforms.is_empty() {
+                    ui.collapsing("Parameters", |ui| {
+                        ui.label("No uniforms detected in shader.");
+                        ui.label("Add uniforms with @group(0) @binding(n) var<uniform> name: type;");
+                    });
+                }
                 
                 ui.separator();
                 
@@ -815,9 +1246,9 @@ mod tests {
     #[test]
     fn test_shader_parameters_default() {
         let params = ShaderParameters::default();
-        assert!(params.uniforms.contains_key("time_scale"));
-        assert!(params.uniforms.contains_key("intensity"));
-        assert!(params.colors.contains_key("base_color"));
+        assert!(params.float_uniforms.contains_key("time_scale"));
+        assert!(params.float_uniforms.contains_key("intensity"));
+        assert!(params.color_uniforms.contains_key("base_color"));
     }
 
     #[test]
@@ -829,6 +1260,67 @@ mod tests {
         assert_eq!(state.camera_distance, 5.0);
         assert_eq!(state.camera_pitch, 0.0);
         assert_eq!(state.camera_yaw, 0.0);
+    }
+
+    #[test]
+    fn test_uniform_extraction_basic() {
+        let shader_code = r#"
+            @group(0) @binding(0)
+            var<uniform> time: f32;
+            
+            @group(0) @binding(1)
+            var<uniform> intensity: f32;
+            
+            @group(0) @binding(2)
+            var<uniform> color: vec4<f32>;
+        "#;
+        
+        let mut params = ShaderParameters::default();
+        params.extract_uniforms_from_shader(shader_code);
+        
+        assert!(params.detected_uniforms.len() >= 3);
+        
+        let names: Vec<String> = params.detected_uniforms.iter().map(|u| u.name.clone()).collect();
+        assert!(names.contains(&"time".to_string()));
+        assert!(names.contains(&"intensity".to_string()));
+        assert!(names.contains(&"color".to_string()));
+    }
+
+    #[test]
+    fn test_uniform_extraction_with_var_syntax() {
+        let shader_code = r#"
+            @group(0) @binding(0)
+            var time: f32;
+            
+            @group(0) @binding(1)
+            var direction: vec3<f32>;
+        "#;
+        
+        let mut params = ShaderParameters::default();
+        params.extract_uniforms_from_shader(shader_code);
+        
+        assert!(params.detected_uniforms.len() >= 2);
+        
+        let types: Vec<String> = params.detected_uniforms.iter().map(|u| u.type_name.clone()).collect();
+        assert!(types.contains(&"f32".to_string()));
+        assert!(types.contains(&"vec3<f32>".to_string()));
+    }
+
+    #[test]
+    fn test_uniform_category_classification() {
+        assert_eq!(classify_uniform_type("f32"), UniformCategory::Scalar);
+        assert_eq!(classify_uniform_type("vec2<f32>"), UniformCategory::Vector);
+        assert_eq!(classify_uniform_type("vec3<f32>"), UniformCategory::Vector);
+        assert_eq!(classify_uniform_type("vec4<f32>"), UniformCategory::Color);
+        assert_eq!(classify_uniform_type("mat4x4<f32>"), UniformCategory::Matrix);
+    }
+
+    #[test]
+    fn test_uniform_default_values() {
+        assert_eq!(get_default_value("f32"), "0.0");
+        assert_eq!(get_default_value("vec2<f32>"), "vec2<f32>(0.0, 0.0)");
+        assert_eq!(get_default_value("vec3<f32>"), "vec3<f32>(0.0, 0.0, 0.0)");
+        assert_eq!(get_default_value("vec4<f32>"), "vec4<f32>(0.0, 0.0, 0.0, 1.0)");
     }
 
     #[test]
@@ -866,5 +1358,70 @@ mod tests {
         // At 45 degrees, right should have equal x and z components
         assert!((right.x - right.z).abs() < 0.001);
         assert!(right.y.abs() < 0.001);
+    }
+
+    #[test]
+    fn test_uniform_initialization() {
+        let mut params = ShaderParameters::default();
+        params.clear_detected();
+        
+        params.initialize_uniform("f32", "scalar_test");
+        params.initialize_uniform("vec2<f32>", "vec2_test");
+        params.initialize_uniform("vec3<f32>", "vec3_test");
+        params.initialize_uniform("vec4<f32>", "color_test");
+        
+        assert!(params.float_uniforms.contains_key("scalar_test"));
+        assert!(params.vector_uniforms.contains_key("vec2_test"));
+        assert!(params.vector_uniforms.contains_key("vec3_test"));
+        assert!(params.color_uniforms.contains_key("color_test"));
+    }
+
+    #[test]
+    fn test_params_get_set() {
+        let mut params = ShaderParameters::default();
+        params.clear_detected();
+        
+        params.set_float("test_float", 42.0);
+        assert_eq!(params.get_float("test_float"), 42.0);
+        assert_eq!(params.get_float("nonexistent"), 0.0);
+        
+        params.set_vector("test_vec", vec![1.0, 2.0, 3.0]);
+        let vec = params.get_vector("test_vec", 3);
+        assert_eq!(vec, vec![1.0, 2.0, 3.0]);
+        
+        params.set_color("test_color", Color::srgb(0.5, 0.5, 0.5));
+        let color = params.get_color("test_color");
+        let linear = color.to_linear();
+        assert!((linear.red - 0.5).abs() < 0.01);
+        assert!((linear.green - 0.5).abs() < 0.01);
+        assert!((linear.blue - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_extract_var_uniform() {
+        let line = "var<uniform> my_var: f32;";
+        assert!(extract_var_uniform(line).is_some());
+        
+        let line2 = "var<uniform> color: vec4<f32>;";
+        if let Some((name, type_name)) = extract_var_uniform(line2) {
+            assert_eq!(name, "color");
+            assert_eq!(type_name, "vec4<f32>");
+        } else {
+            panic!("Failed to extract uniform");
+        }
+    }
+
+    #[test]
+    fn test_extract_group_binding_var() {
+        let line = "@group(0) @binding(0) var my_var: f32;";
+        assert!(extract_group_binding_var(line).is_some());
+        
+        let line2 = "@group(0) @binding(1) var color: vec4<f32>;";
+        if let Some((name, type_name)) = extract_group_binding_var(line2) {
+            assert_eq!(name, "color");
+            assert_eq!(type_name, "vec4<f32>");
+        } else {
+            panic!("Failed to extract uniform");
+        }
     }
 }
