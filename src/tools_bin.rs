@@ -1,10 +1,9 @@
-//! Shader Testing Tools Entry Point - Try with bright colors and center positions
+//! Shader Testing Tools Entry Point - Use Handle::default() for font
 //!
 //! Run with: cargo run --bin shader-tools
 
 use bevy::prelude::*;
-use bevy::text::TextFont;
-use bevy::text::FontSize;
+use bevy::text::{TextFont, FontSize, FontSource};
 
 fn main() {
     App::new()
@@ -21,7 +20,7 @@ fn setup(
 ) {
     println!("DEBUG: Setup called");
     
-    // 3D Camera for the cube - make background a different color to confirm it's rendering
+    // 3D Camera for the cube
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(0.0, 0.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
@@ -30,7 +29,7 @@ fn setup(
     
     println!("DEBUG: Spawning 2D camera");
     
-    // 2D Camera for UI overlay - render AFTER 3d
+    // 2D Camera for UI overlay
     commands.spawn((
         Camera {
             order: 1,
@@ -68,19 +67,20 @@ fn setup(
     
     println!("DEBUG: Spawning UI");
     
-    // Try Text2d at center of screen with BRIGHT GREEN, very large
+    // Try Text2d with Handle::default() for font
     commands.spawn((
         Text2d::new("TEXT2D - BRIGHT GREEN"),
         TextFont {
+            font: FontSource::Handle(Handle::default()),
             font_size: FontSize::Px(128.0),
             ..default()
         },
         TextColor(Color::srgb(0.0, 1.0, 0.0)),
-        Transform::from_xyz(0.0, 0.0, 10.0), // Z=10 to ensure it's on top
+        Transform::from_xyz(0.0, 0.0, 10.0),
         Name::new("Text2d"),
     ));
     
-    // Also try UI text at center with BRIGHT YELLOW
+    // Also try UI text with Handle::default()
     commands.spawn((
         Node {
             position_type: PositionType::Absolute,
@@ -92,12 +92,13 @@ fn setup(
             align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(Color::srgb(0.5, 0.0, 0.0)), // Red background for visibility
+        BackgroundColor(Color::srgb(0.5, 0.0, 0.0)),
         Name::new("Fullscreen UI Panel"),
     )).with_children(|parent| {
         parent.spawn((
             Text::new("UI TEXT - BRIGHT YELLOW"),
             TextFont {
+                font: FontSource::Handle(Handle::default()),
                 font_size: FontSize::Px(128.0),
                 ..default()
             },
