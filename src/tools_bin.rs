@@ -1,15 +1,15 @@
-//! Shader Testing Tools Entry Point - Use generic font family
+//! Shader Testing Tools Entry Point - Try without TextFont component
 //!
 //! Run with: cargo run --bin shader-tools
 
 use bevy::prelude::*;
-use bevy::text::{FontSource, FontSize};
+use bevy::text::{TextFont, FontSize};
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, (rotate_cube, debug_text_system))
+        .add_systems(Update, (rotate_cube, debug_text_system, debug_node_system))
         .run();
 }
 
@@ -72,6 +72,7 @@ fn setup(
         Node {
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
             padding: UiRect::all(Val::Px(20.0)),
             position_type: PositionType::Absolute,
             left: Val::Px(0.0),
@@ -84,18 +85,14 @@ fn setup(
         Name::new("UI Panel"),
     )).with_children(|parent| {
         println!("DEBUG: Spawning text as child");
-        // Text as child - using generic font family name
+        // Text as child - NO TextFont component, rely on default
         parent.spawn((
             Text::new("HELLO WORLD - WHITE TEXT"),
             TextFont {
-                font: FontSource::Family("Fira Mono".into()),
                 font_size: FontSize::Px(32.0),
                 ..default()
             },
             TextColor(Color::WHITE),
-            Node {
-                ..default()
-            },
             Name::new("Text"),
         ));
     });
@@ -117,10 +114,13 @@ fn debug_text_system(
     text_query: Query<&Text>,
 ) {
     let text_count = text_query.iter().count();
-    
-    if text_count > 0 {
-        println!("DEBUG: Found {} Text component(s)", text_count);
-    } else {
-        println!("DEBUG: No Text components found!");
-    }
+    println!("DEBUG: Found {} Text component(s)", text_count);
+}
+
+/// Debug system to print node info
+fn debug_node_system(
+    node_query: Query<&Node>,
+) {
+    let node_count = node_query.iter().count();
+    println!("DEBUG: Found {} Node component(s)", node_count);
 }
