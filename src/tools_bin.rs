@@ -1,15 +1,16 @@
-//! Shader Testing Tools Entry Point - Try without TextFont component
+//! Shader Testing Tools Entry Point - Try Text2dBundle
 //!
 //! Run with: cargo run --bin shader-tools
 
 use bevy::prelude::*;
-use bevy::text::{TextFont, FontSize};
+use bevy::text::TextFont;
+use bevy::text::FontSize;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, (rotate_cube, debug_text_system, debug_node_system))
+        .add_systems(Update, (rotate_cube, debug_text_system, debug_node_system, debug_text2d_system))
         .run();
 }
 
@@ -65,35 +66,41 @@ fn setup(
         Name::new("Cube"),
     ));
     
-    println!("DEBUG: Spawning UI panel");
+    println!("DEBUG: Spawning UI");
     
-    // UI Panel with background - make it big and colored so we can see it
+    // Spawn a simple Text2d directly (not as child of Node)
+    commands.spawn((
+        Text2d::new("HELLO WORLD - WHITE TEXT"),
+        TextFont {
+            font_size: FontSize::Px(64.0),
+            ..default()
+        },
+        TextColor(Color::WHITE),
+        Transform::from_xyz(0.0, 200.0, 0.0),
+        Name::new("Text2d"),
+    ));
+    
+    // Also try a UI text approach
     commands.spawn((
         Node {
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            padding: UiRect::all(Val::Px(20.0)),
             position_type: PositionType::Absolute,
-            left: Val::Px(0.0),
-            top: Val::Px(0.0),
-            width: Val::Percent(100.0),
+            left: Val::Px(10.0),
+            top: Val::Px(10.0),
+            width: Val::Px(400.0),
             height: Val::Px(100.0),
             ..default()
         },
-        BackgroundColor(Color::srgb(0.0, 0.0, 0.5)), // Dark blue background
+        BackgroundColor(Color::srgb(0.0, 0.0, 0.5)),
         Name::new("UI Panel"),
     )).with_children(|parent| {
-        println!("DEBUG: Spawning text as child");
-        // Text as child - NO TextFont component, rely on default
         parent.spawn((
-            Text::new("HELLO WORLD - WHITE TEXT"),
+            Text::new("UI TEXT TEST"),
             TextFont {
                 font_size: FontSize::Px(32.0),
                 ..default()
             },
             TextColor(Color::WHITE),
-            Name::new("Text"),
+            Name::new("UI Text"),
         ));
     });
     
@@ -115,6 +122,14 @@ fn debug_text_system(
 ) {
     let text_count = text_query.iter().count();
     println!("DEBUG: Found {} Text component(s)", text_count);
+}
+
+/// Debug system to print text2d entity info
+fn debug_text2d_system(
+    text2d_query: Query<&Text2d>,
+) {
+    let text2d_count = text2d_query.iter().count();
+    println!("DEBUG: Found {} Text2d component(s)", text2d_count);
 }
 
 /// Debug system to print node info
