@@ -1,15 +1,15 @@
-//! Shader Testing Tools Entry Point - Use Handle::default() for font
+//! Shader Testing Tools Entry Point - Debug font loading
 //!
 //! Run with: cargo run --bin shader-tools
 
 use bevy::prelude::*;
-use bevy::text::{TextFont, FontSize, FontSource};
+use bevy::text::{TextFont, FontSize, FontSource, Font};
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, (rotate_cube, debug_text_system, debug_node_system, debug_text2d_system))
+        .add_systems(Update, (rotate_cube, debug_text_system, debug_node_system, debug_text2d_system, debug_font_assets))
         .run();
 }
 
@@ -17,8 +17,14 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
 ) {
     println!("DEBUG: Setup called");
+    
+    // Debug: Print available fonts
+    println!("DEBUG: Loading default font handle");
+    let default_font_handle: Handle<Font> = asset_server.load("embedded://FiraMono-subset.ttf");
+    println!("DEBUG: Default font handle: {:?}", default_font_handle);
     
     // 3D Camera for the cube
     commands.spawn((
@@ -67,7 +73,7 @@ fn setup(
     
     println!("DEBUG: Spawning UI");
     
-    // Try Text2d with Handle::default() for font
+    // Try Text2d with explicit default font handle
     commands.spawn((
         Text2d::new("TEXT2D - BRIGHT GREEN"),
         TextFont {
@@ -80,7 +86,7 @@ fn setup(
         Name::new("Text2d"),
     ));
     
-    // Also try UI text with Handle::default()
+    // Also try UI text with explicit default font handle
     commands.spawn((
         Node {
             position_type: PositionType::Absolute,
@@ -141,4 +147,16 @@ fn debug_node_system(
 ) {
     let node_count = node_query.iter().count();
     println!("DEBUG: Found {} Node component(s)", node_count);
+}
+
+/// Debug system to print font assets
+fn debug_font_assets(
+    fonts: Res<Assets<Font>>,
+) {
+    let font_count = fonts.len();
+    println!("DEBUG: Loaded {} font asset(s)", font_count);
+    
+    for (handle, font) in fonts.iter() {
+        println!("DEBUG: Font handle: {:?}, data length: {} bytes", handle, font.data.len());
+    }
 }
