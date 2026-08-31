@@ -1,4 +1,4 @@
-//! Shader Testing Tools Entry Point - Try Text2dBundle
+//! Shader Testing Tools Entry Point - Try with bright colors and center positions
 //!
 //! Run with: cargo run --bin shader-tools
 
@@ -21,7 +21,7 @@ fn setup(
 ) {
     println!("DEBUG: Setup called");
     
-    // 3D Camera for the cube
+    // 3D Camera for the cube - make background a different color to confirm it's rendering
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(0.0, 0.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
@@ -30,7 +30,7 @@ fn setup(
     
     println!("DEBUG: Spawning 2D camera");
     
-    // 2D Camera for UI overlay
+    // 2D Camera for UI overlay - render AFTER 3d
     commands.spawn((
         Camera {
             order: 1,
@@ -68,38 +68,40 @@ fn setup(
     
     println!("DEBUG: Spawning UI");
     
-    // Spawn a simple Text2d directly (not as child of Node)
+    // Try Text2d at center of screen with BRIGHT GREEN, very large
     commands.spawn((
-        Text2d::new("HELLO WORLD - WHITE TEXT"),
+        Text2d::new("TEXT2D - BRIGHT GREEN"),
         TextFont {
-            font_size: FontSize::Px(64.0),
+            font_size: FontSize::Px(128.0),
             ..default()
         },
-        TextColor(Color::WHITE),
-        Transform::from_xyz(0.0, 200.0, 0.0),
+        TextColor(Color::srgb(0.0, 1.0, 0.0)),
+        Transform::from_xyz(0.0, 0.0, 10.0), // Z=10 to ensure it's on top
         Name::new("Text2d"),
     ));
     
-    // Also try a UI text approach
+    // Also try UI text at center with BRIGHT YELLOW
     commands.spawn((
         Node {
             position_type: PositionType::Absolute,
-            left: Val::Px(10.0),
-            top: Val::Px(10.0),
-            width: Val::Px(400.0),
-            height: Val::Px(100.0),
+            left: Val::Px(0.0),
+            right: Val::Px(0.0),
+            top: Val::Px(0.0),
+            bottom: Val::Px(0.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(Color::srgb(0.0, 0.0, 0.5)),
-        Name::new("UI Panel"),
+        BackgroundColor(Color::srgb(0.5, 0.0, 0.0)), // Red background for visibility
+        Name::new("Fullscreen UI Panel"),
     )).with_children(|parent| {
         parent.spawn((
-            Text::new("UI TEXT TEST"),
+            Text::new("UI TEXT - BRIGHT YELLOW"),
             TextFont {
-                font_size: FontSize::Px(32.0),
+                font_size: FontSize::Px(128.0),
                 ..default()
             },
-            TextColor(Color::WHITE),
+            TextColor(Color::srgb(1.0, 1.0, 0.0)),
             Name::new("UI Text"),
         ));
     });
