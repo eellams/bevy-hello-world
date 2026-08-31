@@ -1,113 +1,109 @@
-//! Shader Testing Tools Entry Point - Test with ONLY Camera2d
+//! Shader Testing Tools Entry Point - Match official Bevy UI text pattern
 //!
 //! Run with: cargo run --bin shader-tools
 
 use bevy::prelude::*;
-use bevy::text::{TextFont, FontSize, FontSource, Font};
+use bevy::text::{TextFont, FontSize, FontSource};
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, (debug_text_system, debug_node_system, debug_text2d_system, debug_font_assets))
+        .add_systems(Update, rotate_cube)
         .run();
 }
 
 fn setup(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    println!("DEBUG: Setup called");
-    
-    // Debug: Print available fonts
-    println!("DEBUG: Loading default font handle");
-    let default_font_handle: Handle<Font> = asset_server.load("embedded://FiraMono-subset.ttf");
-    println!("DEBUG: Default font handle: {:?}", default_font_handle);
-    
-    // ONLY use Camera2d - no 3D camera
-    println!("DEBUG: Spawning 2D camera ONLY");
+    // 3D Camera for the cube
     commands.spawn((
-        Camera2d,
-        Name::new("2D Camera"),
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 0.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Name::new("3D Camera"),
     ));
     
-    println!("DEBUG: Spawning UI text at center");
-    
-    // Spawn text at center of screen - simple as possible
+    // 2D Camera for UI overlay
     commands.spawn((
-        Text2d::new("HELLO WORLD - BRIGHT WHITE"),
-        TextFont {
-            font: FontSource::Handle(Handle::default()),
-            font_size: FontSize::Px(64.0),
+        Camera {
+            order: 1,
+            clear_color: ClearColorConfig::None,
             ..default()
         },
-        TextColor(Color::srgb(1.0, 1.0, 1.0)),
-        Transform::from_xyz(0.0, 0.0, 0.0),
-        Name::new("Text2d"),
+        Camera2d,
+        Name::new("UI Camera"),
     ));
     
-    // Also try UI text
+    // Light
     commands.spawn((
+        PointLight {
+            intensity: 1000.0,
+            ..default()
+        },
+        Transform::from_xyz(2.0, 2.0, 2.0),
+        Name::new("Light"),
+    ));
+    
+    // A cube with bright color
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(1.0, 0.0, 0.0),
+            ..default()
+        })),
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        Name::new("Cube"),
+    ));
+    
+    // Text using the OFFICIAL Bevy pattern: Text + Node together
+    // Positioned absolutely at top-left
+    commands.spawn((
+        Text::new("HELLO WORLD - WHITE TEXT"),
+        TextFont {
+            font: FontSource::Handle(Handle::default()),
+            font_size: FontSize::Px(32.0),
+            ..default()
+        },
+        TextColor(Color::WHITE),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(12.0),
+            left: Val::Px(12.0),
+            ..default()
+        },
+        Name::new("UI Text"),
+    ));
+    
+    // Also try a centered text
+    commands.spawn((
+        Text::new("CENTERED TEXT - YELLOW"),
+        TextFont {
+            font: FontSource::Handle(Handle::default()),
+            font_size: FontSize::Px(48.0),
+            ..default()
+        },
+        TextColor(Color::srgb(1.0, 1.0, 0.0)),
         Node {
             position_type: PositionType::Absolute,
             left: Val::Px(0.0),
-            top: Val::Px(100.0),
-            width: Val::Px(400.0),
-            height: Val::Px(100.0),
+            right: Val::Px(0.0),
+            top: Val::Px(0.0),
+            bottom: Val::Px(0.0),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(Color::srgb(0.0, 0.0, 0.5)),
-        Name::new("UI Panel"),
-    )).with_children(|parent| {
-        parent.spawn((
-            Text::new("UI TEXT TEST"),
-            TextFont {
-                font: FontSource::Handle(Handle::default()),
-                font_size: FontSize::Px(48.0),
-                ..default()
-            },
-            TextColor(Color::srgb(1.0, 1.0, 0.0)),
-            Name::new("UI Text"),
-        ));
-    });
-    
-    println!("DEBUG: Setup complete");
+        Name::new("Centered Text"),
+    ));
 }
 
-/// Debug system to print text entity info
-fn debug_text_system(
-    text_query: Query<&Text>,
+fn rotate_cube(
+    time: Res<Time>,
+    mut query: Query<&mut Transform, With<Mesh3d>>,
 ) {
-    let text_count = text_query.iter().count();
-    println!("DEBUG: Found {} Text component(s)", text_count);
-}
-
-/// Debug system to print text2d entity info
-fn debug_text2d_system(
-    text2d_query: Query<&Text2d>,
-) {
-    let text2d_count = text2d_query.iter().count();
-    println!("DEBUG: Found {} Text2d component(s)", text2d_count);
-}
-
-/// Debug system to print node info
-fn debug_node_system(
-    node_query: Query<&Node>,
-) {
-    let node_count = node_query.iter().count();
-    println!("DEBUG: Found {} Node component(s)", node_count);
-}
-
-/// Debug system to print font assets
-fn debug_font_assets(
-    fonts: Res<Assets<Font>>,
-) {
-    let font_count = fonts.len();
-    println!("DEBUG: Loaded {} font asset(s)", font_count);
-    
-    for (handle, font) in fonts.iter() {
-        println!("DEBUG: Font handle: {:?}, data length: {} bytes", handle, font.data.len());
+    for mut transform in &mut query {
+        transform.rotate_y(time.delta_secs() * 0.5);
     }
 }
