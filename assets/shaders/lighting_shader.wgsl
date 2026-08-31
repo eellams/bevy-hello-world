@@ -1,6 +1,5 @@
-// Shader Tool Default Shader
-// This shader uses the uniforms defined in ShaderToolMaterial
-// Now includes lighting support
+// Lighting Shader with Point Light and Ambient Light
+// This shader demonstrates Phong lighting with configurable point light and ambient light
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -16,45 +15,27 @@ var<uniform> base_color: vec4<f32>;
 var<uniform> intensity: f32;
 
 @group(0) @binding(2)
-var<uniform> frequency: f32;
-
-@group(0) @binding(3)
-var<uniform> amplitude: f32;
-
-@group(0) @binding(4)
-var<uniform> direction: vec3<f32>;
-
-@group(0) @binding(5)
-var<uniform> offset: vec3<f32>;
-
-@group(0) @binding(6)
-var<uniform> accent_color: vec4<f32>;
-
-@group(0) @binding(7)
-var<uniform> time_scale: f32;
-
-@group(0) @binding(8)
 var<uniform> ambient_color: vec4<f32>;
 
-@group(0) @binding(9)
+@group(0) @binding(3)
 var<uniform> ambient_intensity: f32;
 
-@group(0) @binding(10)
+@group(0) @binding(4)
 var<uniform> point_light_position: vec3<f32>;
 
-@group(0) @binding(11)
+@group(0) @binding(5)
 var<uniform> point_light_color: vec4<f32>;
 
-@group(0) @binding(12)
+@group(0) @binding(6)
 var<uniform> point_light_intensity: f32;
 
-@group(0) @binding(13)
+@group(0) @binding(7)
 var<uniform> point_light_radius: f32;
 
-@group(0) @binding(14)
+@group(0) @binding(8)
 var<uniform> use_point_light: u32;
 
-@group(0) @binding(15)
+@group(0) @binding(9)
 var<uniform> use_ambient_light: u32;
 
 @vertex
@@ -99,7 +80,6 @@ fn calculate_attenuation(distance: f32, radius: f32) -> f32 {
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Apply intensity to base color
     let base = base_color * intensity;
     var final_color = vec4<f32>(0.0, 0.0, 0.0, base.a);
     
@@ -133,14 +113,8 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
     
-    // Add the original shader pattern
-    let pattern = sin(in.uv.x * frequency * 10.0) * 
-                  cos(in.uv.y * frequency * 10.0) * 
-                  amplitude * 0.5 + 0.5;
-    let mixed = mix(base.rgb, accent_color.rgb, pattern);
-    
-    // Combine with lighting
-    final_color.rgb *= mixed;
+    // Multiply by base color
+    final_color.rgb *= base.rgb;
     
     return final_color;
 }

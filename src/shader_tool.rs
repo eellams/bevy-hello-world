@@ -64,6 +64,22 @@ pub struct ShaderToolMaterial {
     pub accent_color: LinearRgba,
     #[uniform(7)]
     pub time_scale: f32,
+    #[uniform(8)]
+    pub ambient_color: LinearRgba,
+    #[uniform(9)]
+    pub ambient_intensity: f32,
+    #[uniform(10)]
+    pub point_light_position: Vec3,
+    #[uniform(11)]
+    pub point_light_color: LinearRgba,
+    #[uniform(12)]
+    pub point_light_intensity: f32,
+    #[uniform(13)]
+    pub point_light_radius: f32,
+    #[uniform(14)]
+    pub use_point_light: u32,
+    #[uniform(15)]
+    pub use_ambient_light: u32,
 }
 
 impl Default for ShaderToolMaterial {
@@ -77,13 +93,21 @@ impl Default for ShaderToolMaterial {
             offset: Vec3::ZERO,
             accent_color: LinearRgba::new(0.2, 0.8, 0.4, 1.0),
             time_scale: 1.0,
+            ambient_color: LinearRgba::new(0.1, 0.1, 0.1, 1.0),
+            ambient_intensity: 1.0,
+            point_light_position: Vec3::new(2.0, 2.0, 2.0),
+            point_light_color: LinearRgba::new(1.0, 1.0, 1.0, 1.0),
+            point_light_intensity: 1000.0,
+            point_light_radius: 10.0,
+            use_point_light: 1,
+            use_ambient_light: 1,
         }
     }
 }
 
 impl Material for ShaderToolMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/shader_tool.wgsl".into()
+        "assets/shaders/lighting_shader.wgsl".into()
     }
     
     fn alpha_mode(&self) -> AlphaMode {
@@ -120,6 +144,7 @@ impl Plugin for ShaderToolPlugin {
             .init_resource::<MaterialParameters>()
             .init_resource::<ShaderParameters>()
             .init_resource::<ShaderEditorState>()
+            .init_resource::<LightingParameters>()
             .add_plugins(MaterialPlugin::<ShaderToolMaterial>::default())
             .add_systems(Startup, setup_tool)
             .add_systems(EguiPrimaryContextPass, ui_system)
@@ -128,6 +153,8 @@ impl Plugin for ShaderToolPlugin {
                 check_shader_errors,
                 handle_camera_controls,
                 update_materials_from_params,
+                update_point_light,
+                sync_lighting_to_shader_params,
             ))
             ;
     }
@@ -271,20 +298,56 @@ impl Default for ShaderParameters {
         float_uniforms.insert("intensity".to_string(), 1.0);
         float_uniforms.insert("frequency".to_string(), 1.0);
         float_uniforms.insert("amplitude".to_string(), 0.5);
+        float_uniforms.insert("ambient_intensity".to_string(), 1.0);
+        float_uniforms.insert("point_light_intensity".to_string(), 1000.0);
+        float_uniforms.insert("point_light_radius".to_string(), 10.0);
+        float_uniforms.insert("use_point_light".to_string(), 1.0);
+        float_uniforms.insert("use_ambient_light".to_string(), 1.0);
         
         let mut vector_uniforms = HashMap::new();
         vector_uniforms.insert("direction".to_string(), vec![0.0, 0.0, 1.0]);
         vector_uniforms.insert("offset".to_string(), vec![0.0, 0.0, 0.0]);
+        vector_uniforms.insert("point_light_position".to_string(), vec![2.0, 2.0, 2.0]);
         
         let mut color_uniforms = HashMap::new();
         color_uniforms.insert("base_color".to_string(), Color::srgb(0.8, 0.2, 0.4));
         color_uniforms.insert("accent_color".to_string(), Color::srgb(0.2, 0.8, 0.4));
+        color_uniforms.insert("ambient_color".to_string(), Color::srgb(0.1, 0.1, 0.1));
+        color_uniforms.insert("point_light_color".to_string(), Color::srgb(1.0, 1.0, 1.0));
         
         Self {
             float_uniforms,
             vector_uniforms,
             color_uniforms,
             detected_uniforms: Vec::new(),
+        }
+    }
+}
+
+/// Resource for lighting parameters
+#[derive(Resource, Debug, Clone)]
+pub struct LightingParameters {
+    pub ambient_color: Color,
+    pub ambient_intensity: f32,
+    pub point_light_position: Vec3,
+    pub point_light_color: Color,
+    pub point_light_intensity: f32,
+    pub point_light_radius: f32,
+    pub use_point_light: bool,
+    pub use_ambient_light: bool,
+}
+
+impl Default for LightingParameters {
+    fn default() -> Self {
+        Self {
+            ambient_color: Color::srgb(0.1, 0.1, 0.1),
+            ambient_intensity: 1.0,
+            point_light_position: Vec3::new(2.0, 2.0, 2.0),
+            point_light_color: Color::srgb(1.0, 1.0, 1.0),
+            point_light_intensity: 1000.0,
+            point_light_radius: 10.0,
+            use_point_light: true,
+            use_ambient_light: true,
         }
     }
 }
@@ -381,12 +444,21 @@ impl ShaderParameters {
                 .map(|v| Vec3::new(v[0], v[1], v[2])).unwrap_or(Vec3::ZERO),
             accent_color: to_linear_rgba(accent_color),
             time_scale: self.float_uniforms.get("time_scale").copied().unwrap_or(1.0),
+            ambient_color: to_linear_rgba(self.color_uniforms.get("ambient_color").copied().unwrap_or(Color::srgb(0.1, 0.1, 0.1))),
+            ambient_intensity: self.float_uniforms.get("ambient_intensity").copied().unwrap_or(1.0),
+            point_light_position: self.vector_uniforms.get("point_light_position")
+                .map(|v| Vec3::new(v[0], v[1], v[2])).unwrap_or(Vec3::new(2.0, 2.0, 2.0)),
+            point_light_color: to_linear_rgba(self.color_uniforms.get("point_light_color").copied().unwrap_or(Color::srgb(1.0, 1.0, 1.0))),
+            point_light_intensity: self.float_uniforms.get("point_light_intensity").copied().unwrap_or(1000.0),
+            point_light_radius: self.float_uniforms.get("point_light_radius").copied().unwrap_or(10.0),
+            use_point_light: if self.float_uniforms.get("use_point_light").copied().unwrap_or(1.0) > 0.5 { 1 } else { 0 },
+            use_ambient_light: if self.float_uniforms.get("use_ambient_light").copied().unwrap_or(1.0) > 0.5 { 1 } else { 0 },
         }
     }
 }
 
 #[derive(Debug, Clone)]
-struct DetectedUniform {
+pub struct DetectedUniform {
     pub name: String,
     pub type_name: String,
     pub category: UniformCategory,
@@ -603,6 +675,9 @@ pub struct ToolEntity;
 #[derive(Component)]
 pub struct ToolCamera;
 
+#[derive(Component)]
+pub struct PointLightMarker;
+
 /// Marker for which material type an entity uses
 #[derive(Component)]
 pub enum EntityMaterialType {
@@ -632,6 +707,27 @@ fn update_materials_from_params(
     }
 }
 
+/// Sync lighting parameters to shader parameters so lighting UI changes affect shaders
+fn sync_lighting_to_shader_params(
+    lighting_params: Res<LightingParameters>,
+    mut shader_params: ResMut<ShaderParameters>,
+) {
+    // Sync ambient light
+    shader_params.color_uniforms.insert("ambient_color".to_string(), lighting_params.ambient_color);
+    shader_params.float_uniforms.insert("ambient_intensity".to_string(), lighting_params.ambient_intensity);
+    
+    // Sync point light
+    shader_params.vector_uniforms.insert("point_light_position".to_string(), 
+        vec![lighting_params.point_light_position.x, 
+             lighting_params.point_light_position.y, 
+             lighting_params.point_light_position.z]);
+    shader_params.color_uniforms.insert("point_light_color".to_string(), lighting_params.point_light_color);
+    shader_params.float_uniforms.insert("point_light_intensity".to_string(), lighting_params.point_light_intensity);
+    shader_params.float_uniforms.insert("point_light_radius".to_string(), lighting_params.point_light_radius);
+    shader_params.float_uniforms.insert("use_point_light".to_string(), if lighting_params.use_point_light { 1.0 } else { 0.0 });
+    shader_params.float_uniforms.insert("use_ambient_light".to_string(), if lighting_params.use_ambient_light { 1.0 } else { 0.0 });
+}
+
 fn setup_tool(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -641,6 +737,7 @@ fn setup_tool(
     mut editor: ResMut<ShaderEditorState>,
     mat_params: Res<MaterialParameters>,
     shader_params: Res<ShaderParameters>,
+    lighting_params: Res<LightingParameters>,
 ) {
     *editor = ShaderEditorState::new();
     
@@ -659,11 +756,14 @@ fn setup_tool(
     
     commands.spawn((
         PointLight {
-            intensity: 1000.0,
+            color: lighting_params.point_light_color,
+            intensity: lighting_params.point_light_intensity,
+            range: lighting_params.point_light_radius,
             ..default()
         },
-        Transform::from_xyz(2.0, 2.0, 2.0),
-        Name::new("Light"),
+        Transform::from_translation(lighting_params.point_light_position),
+        Name::new("Point Light"),
+        PointLightMarker,
     ));
     
     spawn_test_geometry(
@@ -716,8 +816,12 @@ fn spawn_test_geometry(
 
 fn scan_for_shaders(state: &mut ResMut<ToolState>) {
     state.available_shaders = vec![
-        "shaders/shader_tool.wgsl".to_string(),
+        "assets/shaders/shader_tool.wgsl".to_string(),
+        "assets/shaders/lighting_shader.wgsl".to_string(),
+        "shaders/test_shader.wgsl".to_string(),
         "shaders/animate_shader.wgsl".to_string(),
+        "shaders/color_shader.wgsl".to_string(),
+        "shaders/pattern_shader.wgsl".to_string(),
     ];
 }
 
@@ -737,6 +841,18 @@ fn update_camera(
         );
         
         transform.look_at(state.camera_target, Vec3::Y);
+    }
+}
+
+fn update_point_light(
+    lighting_params: Res<LightingParameters>,
+    mut query: Query<(&mut PointLight, &mut Transform), With<PointLightMarker>>,
+) {
+    for (mut light, mut transform) in &mut query {
+        transform.translation = lighting_params.point_light_position;
+        light.color = lighting_params.point_light_color;
+        light.intensity = lighting_params.point_light_intensity;
+        light.range = lighting_params.point_light_radius;
     }
 }
 
@@ -808,6 +924,7 @@ fn ui_system(
     mut state: ResMut<ToolState>,
     mut mat_params: ResMut<MaterialParameters>,
     mut shader_params: ResMut<ShaderParameters>,
+    mut lighting_params: ResMut<LightingParameters>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut editor: ResMut<ShaderEditorState>,
     mut materials_std: ResMut<Assets<StandardMaterial>>,
@@ -899,6 +1016,9 @@ fn ui_system(
                 });
                 
                 ui.separator();
+                lighting_ui(ui, &mut lighting_params);
+                
+                ui.separator();
                 ui.collapsing("Camera Controls", |ui| {
                     ui.label("Right-click + drag: Orbit camera");
                     ui.label("Right-click + Shift + drag: Pan camera");
@@ -906,6 +1026,54 @@ fn ui_system(
                 });
             });
     }
+}
+
+fn lighting_ui(ui: &mut egui::Ui, lighting_params: &mut ResMut<LightingParameters>) {
+    ui.collapsing("Lighting Controls", |ui| {
+        ui.checkbox(&mut lighting_params.use_ambient_light, "Use Ambient Light");
+        if lighting_params.use_ambient_light {
+            ui.horizontal(|ui| {
+                ui.label("Ambient Color:");
+                let ambient_srgba = lighting_params.ambient_color.to_srgba();
+                let mut rgb = [ambient_srgba.red, ambient_srgba.green, ambient_srgba.blue];
+                if ui.color_edit_button_rgb(&mut rgb).changed() {
+                    lighting_params.ambient_color = Color::srgba(rgb[0], rgb[1], rgb[2], 1.0);
+                }
+            });
+            ui.add(egui::Slider::new(&mut lighting_params.ambient_intensity, 0.0..=2.0).text("Ambient Intensity"));
+        }
+        
+        ui.separator();
+        
+        ui.checkbox(&mut lighting_params.use_point_light, "Use Point Light");
+        if lighting_params.use_point_light {
+            ui.horizontal(|ui| {
+                ui.label("Point Light Color:");
+                let point_srgba = lighting_params.point_light_color.to_srgba();
+                let mut rgb = [point_srgba.red, point_srgba.green, point_srgba.blue];
+                if ui.color_edit_button_rgb(&mut rgb).changed() {
+                    lighting_params.point_light_color = Color::srgba(rgb[0], rgb[1], rgb[2], 1.0);
+                }
+            });
+            ui.add(egui::Slider::new(&mut lighting_params.point_light_intensity, 0.0..=2000.0).text("Point Light Intensity"));
+            ui.add(egui::Slider::new(&mut lighting_params.point_light_radius, 0.1..=50.0).text("Point Light Radius"));
+            
+            ui.separator();
+            ui.label("Point Light Position:");
+            ui.horizontal(|ui| {
+                ui.label("X:");
+                ui.add(egui::Slider::new(&mut lighting_params.point_light_position.x, -10.0..=10.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Y:");
+                ui.add(egui::Slider::new(&mut lighting_params.point_light_position.y, -10.0..=10.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Z:");
+                ui.add(egui::Slider::new(&mut lighting_params.point_light_position.z, -10.0..=10.0));
+            });
+        }
+    });
 }
 
 fn material_ui(ui: &mut egui::Ui, mat_params: &mut ResMut<MaterialParameters>) {
@@ -945,7 +1113,7 @@ fn shader_ui(
     shader_params: &mut ResMut<ShaderParameters>,
     editor: &mut ResMut<ShaderEditorState>,
     _meshes: &mut ResMut<Assets<Mesh>>,
-    materials_shader: &Res<Assets<ShaderToolMaterial>>,
+    _materials_shader: &Res<Assets<ShaderToolMaterial>>,
     _geometry_query: &mut Query<&mut Mesh3d, With<ToolEntity>>,
     _commands: &mut Commands,
 ) {
