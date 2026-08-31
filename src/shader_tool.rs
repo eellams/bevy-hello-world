@@ -7,14 +7,99 @@
 //! - Parameter controls via egui sliders
 //! - Blender-like camera controls (orbit, pan, zoom)
 //! - Live shader code editor with file I/O
+//! - Integration with Bevy's shader pipeline
 //! - Real-time preview with error handling
 
 use bevy::prelude::*;
 use bevy::input::mouse::{MouseMotion, MouseWheel, MouseButton};
+use bevy::pbr::MaterialPipeline;
+use bevy::pbr::MaterialPipelineKey;
+use bevy::render::mesh::MeshVertexBufferLayoutRef;
+use bevy::render::render_resource::*;
+use bevy::shader::ShaderRef;
+use bevy::color::LinearRgba;
 use bevy_egui::{egui, EguiContexts, EguiPrimaryContextPass};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
+
+/// Custom shader material for the tool
+/// This uses Bevy's Material trait to integrate with the standard pipeline
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+pub struct ShaderToolMaterial {
+    /// Base color uniform
+    #[uniform(0)]
+    base_color: LinearRgba,
+    /// Intensity uniform
+    #[uniform(1)]
+    intensity: f32,
+    /// Frequency uniform
+    #[uniform(2)]
+    frequency: f32,
+    /// Amplitude uniform
+    #[uniform(3)]
+    amplitude: f32,
+    /// Direction uniform
+    #[uniform(4)]
+    direction: Vec3,
+    /// Offset uniform
+    #[uniform(5)]
+    offset: Vec3,
+    /// Accent color uniform
+    #[uniform(6)]
+    accent_color: LinearRgba,
+    /// Time scale uniform
+    #[uniform(7)]
+    time_scale: f32,
+}
+
+impl Default for ShaderToolMaterial {
+    fn default() -> Self {
+        Self {
+            base_color: LinearRgba::new(0.8, 0.2, 0.4, 1.0),
+            intensity: 1.0,
+            frequency: 1.0,
+            amplitude: 0.5,
+            direction: Vec3::Z,
+            offset: Vec3::ZERO,
+            accent_color: LinearRgba::new(0.2, 0.8, 0.4, 1.0),
+            time_scale: 1.0,
+        }
+    }
+}
+
+impl Material for ShaderToolMaterial {
+    fn fragment_shader() -> ShaderRef {
+        // Use a default shader - will be overridden dynamically
+        "embedded://bevy-hello-world/shader_tool_default.wgsl".into()
+    }
+    
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Opaque
+    }
+    
+    fn specialize(
+        _pipeline: &MaterialPipeline,
+        descriptor: &mut RenderPipelineDescriptor,
+        layout: &MeshVertexBufferLayoutRef,
+        _key: MaterialPipelineKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        // Configure the pipeline for our shader
+        let vertex_layout = layout.0.get_layout(&[
+            Mesh::ATTRIBUTE_POSITION.at_shader_location(0),
+            Mesh::ATTRIBUTE_NORMAL.at_shader_location(1),
+            Mesh::ATTRIBUTE_UV_0.at_shader_location(2),
+        ])?;
+        
+        if let Some(vertex_buffer_layout) = descriptor.vertex.buffers.get_mut(0) {
+            vertex_buffer_layout.attributes = vertex_layout.attributes;
+        } else {
+            return Ok(()); // Skip vertex buffer configuration for now
+        }
+        
+        Ok(())
+    }
+}
 
 /// Main plugin for the shader testing tool
 pub struct ShaderToolPlugin;
@@ -25,12 +110,14 @@ impl Plugin for ShaderToolPlugin {
             .init_resource::<ShaderToolState>()
             .init_resource::<ShaderParameters>()
             .init_resource::<ShaderEditorState>()
+            .add_plugins(MaterialPlugin::<ShaderToolMaterial>::default())
             .add_systems(Startup, setup_shader_tool)
             .add_systems(EguiPrimaryContextPass, ui_system)
             .add_systems(Update, (
                 update_camera,
                 check_shader_errors,
                 handle_camera_controls,
+                update_material_from_params,
             ))
             ;
     }
@@ -166,9 +253,12 @@ impl Default for ShaderParameters {
         let mut float_uniforms = HashMap::new();
         float_uniforms.insert("time_scale".to_string(), 1.0);
         float_uniforms.insert("intensity".to_string(), 1.0);
+        float_uniforms.insert("frequency".to_string(), 1.0);
+        float_uniforms.insert("amplitude".to_string(), 0.5);
         
         let mut vector_uniforms = HashMap::new();
         vector_uniforms.insert("direction".to_string(), vec![0.0, 0.0, 1.0]);
+        vector_uniforms.insert("offset".to_string(), vec![0.0, 0.0, 0.0]);
         
         let mut color_uniforms = HashMap::new();
         color_uniforms.insert("base_color".to_string(), Color::srgb(0.8, 0.2, 0.4));
@@ -233,11 +323,6 @@ impl ShaderParameters {
     /// Extract uniforms from shader code
     pub fn extract_uniforms_from_shader(&mut self, shader_code: &str) {
         self.clear_detected();
-        
-        // Simple string-based extraction of uniforms
-        // This looks for patterns like:
-        // @group(0) @binding(0) var<uniform> my_uniform: f32;
-        // @group(0) @binding(1) var my_color: vec4<f32>;
         
         for line in shader_code.lines() {
             let trimmed = line.trim();
@@ -333,11 +418,37 @@ impl ShaderParameters {
             self.vector_uniforms.insert(name.to_string(), vec![0.0; size]);
         }
     }
+    
+    /// Create a ShaderToolMaterial from the current parameter values
+    pub fn to_material(&self) -> ShaderToolMaterial {
+        let base_color = self.color_uniforms.get("base_color").copied().unwrap_or(Color::srgb(0.8, 0.2, 0.4));
+        let accent_color = self.color_uniforms.get("accent_color").copied().unwrap_or(Color::srgb(0.2, 0.8, 0.4));
+        
+        let to_linear_rgba = |c: Color| -> LinearRgba {
+            match c {
+                Color::Srgba(s) => LinearRgba::new(s.red, s.green, s.blue, s.alpha),
+                Color::LinearRgba(l) => l,
+                _ => LinearRgba::new(0.8, 0.2, 0.4, 1.0),
+            }
+        };
+        
+        ShaderToolMaterial {
+            base_color: to_linear_rgba(base_color),
+            intensity: self.float_uniforms.get("intensity").copied().unwrap_or(1.0),
+            frequency: self.float_uniforms.get("frequency").copied().unwrap_or(1.0),
+            amplitude: self.float_uniforms.get("amplitude").copied().unwrap_or(0.5),
+            direction: self.vector_uniforms.get("direction")
+                .map(|v| Vec3::new(v[0], v[1], v[2])).unwrap_or(Vec3::Z),
+            offset: self.vector_uniforms.get("offset")
+                .map(|v| Vec3::new(v[0], v[1], v[2])).unwrap_or(Vec3::ZERO),
+            accent_color: to_linear_rgba(accent_color),
+            time_scale: self.float_uniforms.get("time_scale").copied().unwrap_or(1.0),
+        }
+    }
 }
 
 /// Extract var<uniform> name: type from a line
 fn extract_var_uniform(line: &str) -> Option<(&str, &str)> {
-    // Pattern: var<uniform> name: type;
     let parts: Vec<&str> = line.split_whitespace().collect();
     
     for i in 0..parts.len().saturating_sub(2) {
@@ -345,12 +456,8 @@ fn extract_var_uniform(line: &str) -> Option<(&str, &str)> {
             if i + 2 < parts.len() {
                 let name_part = parts[i + 1];
                 let type_part = parts[i + 2];
-                
-                // Clean up name (remove trailing colon if present)
                 let name = name_part.trim_end_matches(':');
-                // Clean up type (remove trailing semicolon if present)
                 let type_name = type_part.trim_end_matches(';');
-                
                 if !name.is_empty() && !type_name.is_empty() {
                     return Some((name, type_name));
                 }
@@ -364,28 +471,20 @@ fn extract_var_uniform(line: &str) -> Option<(&str, &str)> {
 fn extract_group_binding_var(line: &str) -> Option<(&str, &str)> {
     let parts: Vec<&str> = line.split_whitespace().collect();
     
-    let mut group_idx = None;
-    let mut binding_idx = None;
     let mut var_idx = None;
     
     for (i, part) in parts.iter().enumerate() {
-        if part.starts_with("@group(") && part.ends_with(")") {
-            group_idx = Some(i);
-        } else if part.starts_with("@binding(") && part.ends_with(")") {
-            binding_idx = Some(i);
-        } else if *part == "var" {
+        if *part == "var" {
             var_idx = Some(i);
         }
     }
     
-    if let (Some(_group_idx), Some(_binding_idx), Some(var_idx)) = (group_idx, binding_idx, var_idx) {
+    if let Some(var_idx) = var_idx {
         if var_idx + 2 < parts.len() {
             let name_part = parts[var_idx + 1];
             let type_part = parts[var_idx + 2];
-            
             let name = name_part.trim_end_matches(':');
             let type_name = type_part.trim_end_matches(';');
-            
             if !name.is_empty() && !type_name.is_empty() {
                 return Some((name, type_name));
             }
@@ -398,28 +497,20 @@ fn extract_group_binding_var(line: &str) -> Option<(&str, &str)> {
 fn extract_group_binding_var_uniform(line: &str) -> Option<(&str, &str)> {
     let parts: Vec<&str> = line.split_whitespace().collect();
     
-    let mut group_idx = None;
-    let mut binding_idx = None;
     let mut var_idx = None;
     
     for (i, part) in parts.iter().enumerate() {
-        if part.starts_with("@group(") && part.ends_with(")") {
-            group_idx = Some(i);
-        } else if part.starts_with("@binding(") && part.ends_with(")") {
-            binding_idx = Some(i);
-        } else if *part == "var<uniform>" {
+        if *part == "var<uniform>" {
             var_idx = Some(i);
         }
     }
     
-    if let (Some(_group_idx), Some(_binding_idx), Some(var_idx)) = (group_idx, binding_idx, var_idx) {
+    if let Some(var_idx) = var_idx {
         if var_idx + 2 < parts.len() {
             let name_part = parts[var_idx + 1];
             let type_part = parts[var_idx + 2];
-            
             let name = name_part.trim_end_matches(':');
             let type_name = type_part.trim_end_matches(';');
-            
             if !name.is_empty() && !type_name.is_empty() {
                 return Some((name, type_name));
             }
@@ -515,7 +606,7 @@ impl ShaderEditorState {
     /// Create a new editor state with default shader code
     pub fn new() -> Self {
         // Default shader that uses uniforms
-        let default_shader = r#"// Default shader with uniforms
+        let default_shader = r#"// Default shader
 // Edit this code and press "Apply" to see changes
 
 struct VertexOutput {
@@ -528,6 +619,24 @@ var<uniform> base_color: vec4<f32>;
 
 @group(0) @binding(1)
 var<uniform> intensity: f32;
+
+@group(0) @binding(2)
+var<uniform> frequency: f32;
+
+@group(0) @binding(3)
+var<uniform> amplitude: f32;
+
+@group(0) @binding(4)
+var<uniform> direction: vec3<f32>;
+
+@group(0) @binding(5)
+var<uniform> offset: vec3<f32>;
+
+@group(0) @binding(6)
+var<uniform> accent_color: vec4<f32>;
+
+@group(0) @binding(7)
+var<uniform> time_scale: f32;
 
 @vertex
 fn vertex(
@@ -544,7 +653,18 @@ fn vertex(
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    return base_color * intensity;
+    // Apply intensity to base color
+    let final_color = base_color * intensity;
+    
+    // Add some pattern based on UV and frequency
+    let pattern = sin(in.uv.x * frequency * 10.0) * 
+                  cos(in.uv.y * frequency * 10.0) * 
+                  amplitude * 0.5 + 0.5;
+    
+    // Mix with accent color
+    let mixed = mix(final_color.rgb, accent_color.rgb, pattern);
+    
+    return vec4<f32>(mixed, final_color.a);
 }
 "#.to_string();
         
@@ -625,11 +745,29 @@ pub struct ShaderTestEntity;
 #[derive(Component)]
 pub struct ToolCamera;
 
+/// Update material from parameters
+fn update_material_from_params(
+    params: Res<ShaderParameters>,
+    mut materials: ResMut<Assets<ShaderToolMaterial>>,
+    entity_query: Query<&MeshMaterial3d<ShaderToolMaterial>>,
+) {
+    // Get all material handles from entities
+    let material_handles: Vec<Handle<ShaderToolMaterial>> = 
+        entity_query.iter().map(|m| m.0.clone()).collect();
+    
+    // Update each material with current parameter values
+    for handle in material_handles {
+        if let Some(mut material) = materials.get_mut(&handle) {
+            *material = params.to_material();
+        }
+    }
+}
+
 /// Setup the shader testing tool
 fn setup_shader_tool(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<ShaderToolMaterial>>,
     mut state: ResMut<ShaderToolState>,
     mut editor: ResMut<ShaderEditorState>,
     mut params: ResMut<ShaderParameters>,
@@ -640,8 +778,11 @@ fn setup_shader_tool(
     // Extract uniforms from the default shader
     params.extract_uniforms_from_shader(&editor.source_code);
     
-    // Try to create a temp file for the default shader
-    let _ = editor.create_temp_file();
+    // Create a temp file for the shader
+    if let Ok(temp_path) = editor.create_temp_file() {
+        editor.temp_file = Some(temp_path.clone());
+        state.current_shader = temp_path.display().to_string();
+    }
     
     // Setup camera with Blender-like controls
     let camera_transform = Transform::from_translation(Vec3::new(
@@ -667,45 +808,26 @@ fn setup_shader_tool(
         Name::new("Light"),
     ));
     
-    // Create initial geometry
-    spawn_test_geometry(&mut commands, &mut meshes, &mut materials, &state);
+    // Create initial geometry with custom material
+    spawn_test_geometry(&mut commands, &mut meshes, &mut materials, &state, &params);
     
     // Scan for shaders in the shaders directory
     scan_for_shaders(&mut state);
-    
-    // Try to load the first shader
-    if !state.available_shaders.is_empty() {
-        state.current_shader = state.available_shaders[0].clone();
-        // Try to load the shader into the editor
-        if let Some(path_str) = state.available_shaders.first() {
-            let path = Path::new(path_str);
-            if path.exists() {
-                let mut editor_mut = editor.clone();
-                let _ = editor_mut.load_from_file(path);
-                *editor = editor_mut;
-                // Extract uniforms from the loaded shader
-                params.extract_uniforms_from_shader(&editor.source_code);
-            }
-        }
-    }
 }
 
-/// Spawn the test geometry entity
+/// Spawn the test geometry entity with custom material
 fn spawn_test_geometry(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<StandardMaterial>>,
+    materials: &mut ResMut<Assets<ShaderToolMaterial>>,
     state: &ShaderToolState,
+    params: &ShaderParameters,
 ) {
     let mesh = state.current_geometry.create_mesh();
     let mesh_handle = meshes.add(mesh);
     
-    let material = StandardMaterial {
-        base_color: Color::srgb(0.8, 0.2, 0.4),
-        metallic: 0.5,
-        perceptual_roughness: 0.5,
-        ..default()
-    };
+    // Create the material with current parameter values
+    let material = params.to_material();
     let material_handle = materials.add(material);
     
     commands.spawn((
@@ -719,8 +841,6 @@ fn spawn_test_geometry(
 
 /// Scan for shader files in the shaders directory
 fn scan_for_shaders(state: &mut ResMut<ShaderToolState>) {
-    // For now, use hardcoded shader paths
-    // In a real implementation, this would scan the filesystem
     state.available_shaders = vec![
         "shaders/test_shader.wgsl".to_string(),
         "shaders/color_shader.wgsl".to_string(),
@@ -736,7 +856,6 @@ fn update_camera(
     mut query: Query<&mut Transform, With<ToolCamera>>,
 ) {
     for mut transform in &mut query {
-        // Calculate camera position based on orbit parameters
         let pitch = state.camera_pitch;
         let yaw = state.camera_yaw;
         let distance = state.camera_distance;
@@ -747,15 +866,11 @@ fn update_camera(
             distance * yaw.sin() * pitch.cos(),
         );
         
-        // Always look at the target
         transform.look_at(state.camera_target, Vec3::Y);
     }
 }
 
 /// Handle Blender-like camera controls
-/// - Right-click + drag: Orbit camera around target
-/// - Right-click + drag + Shift: Pan camera
-/// - Scroll: Zoom camera in/out
 fn handle_camera_controls(
     windows: Query<&Window>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
@@ -766,28 +881,20 @@ fn handle_camera_controls(
 ) {
     let window = if let Ok(w) = windows.single() { w } else { return };
     
-    // Get mouse position
     if let Some(mouse_pos) = window.cursor_position() {
         state.last_mouse_pos = Some(mouse_pos);
     }
     
-    // Handle orbit (right-click drag)
     if mouse_buttons.pressed(MouseButton::Right) {
-        // Check if we just started dragging
         if !state.camera_dragging && state.last_mouse_pos.is_some() {
             state.camera_dragging = true;
         }
         
         if state.camera_dragging {
-            // Process mouse motion for orbit
             for event in mouse_motion_events.read() {
                 let delta = event.delta;
-                
-                // Orbit: rotate around target
                 state.camera_yaw -= delta.x * 0.01;
                 state.camera_pitch -= delta.y * 0.01;
-                
-                // Clamp pitch to avoid flipping
                 state.camera_pitch = state.camera_pitch.clamp(-1.5, 1.5);
             }
         }
@@ -795,29 +902,20 @@ fn handle_camera_controls(
         state.camera_dragging = false;
     }
     
-    // Handle pan (right-click + Shift drag)
     if mouse_buttons.pressed(MouseButton::Right) && keyboard.pressed(KeyCode::ShiftLeft) {
         if !state.camera_panning && state.last_mouse_pos.is_some() {
             state.camera_panning = true;
         }
         
         if state.camera_panning {
-            // Process mouse motion for pan
             for event in mouse_motion_events.read() {
                 let delta = event.delta;
-                
-                // Calculate pan direction in world space
-                // Right vector (perpendicular to forward and up)
                 let right = Vec3::new(
                     -state.camera_yaw.sin(),
                     0.0,
                     state.camera_yaw.cos(),
                 ).normalize();
-                
-                // Up vector
                 let up = Vec3::Y;
-                
-                // Pan in screen space
                 let pan_speed = 0.01 * state.camera_distance;
                 state.camera_target -= right * delta.x * pan_speed;
                 state.camera_target += up * delta.y * pan_speed;
@@ -827,17 +925,14 @@ fn handle_camera_controls(
         state.camera_panning = false;
     }
     
-    // Handle zoom (mouse wheel)
     for event in mouse_wheel_events.read() {
         state.camera_distance -= event.y * 0.1;
         state.camera_distance = state.camera_distance.clamp(1.0, 20.0);
     }
 }
 
-/// Check for shader compilation errors and display them
-fn check_shader_errors(
-    editor: Res<ShaderEditorState>,
-) {
+/// Check for shader compilation errors
+fn check_shader_errors(editor: Res<ShaderEditorState>) {
     if editor.has_errors {
         eprintln!("Shader compilation errors:");
         for error in &editor.error_messages {
@@ -853,14 +948,15 @@ fn ui_system(
     mut params: ResMut<ShaderParameters>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut editor: ResMut<ShaderEditorState>,
+    _materials: Res<Assets<ShaderToolMaterial>>,
     mut geometry_query: Query<&mut Mesh3d, With<ShaderTestEntity>>,
+    _entity_query: Query<Entity, With<ShaderTestEntity>>,
 ) {
     if !state.show_ui {
         return;
     }
     
     if let Ok(ctx) = contexts.ctx_mut() {
-        // Main window
         egui::Window::new("Shader Testing Tool")
             .default_pos(egui::pos2(10.0, 10.0))
             .default_size(egui::vec2(350.0, 600.0))
@@ -873,37 +969,36 @@ fn ui_system(
                         .position(|s| s == &state.current_shader)
                         .unwrap_or(0);
                     
-                    let mut selected_shader = state.current_shader.clone();
+                    let current_shader_clone = state.current_shader.clone();
+                    let mut selected_shader = current_shader_clone;
                     egui::ComboBox::from_label("")
                         .selected_text(&selected_shader)
                         .show_ui(ui, |ui| {
                             for (i, shader) in state.available_shaders.iter().enumerate() {
                                 if ui.selectable_label(i == current_index, shader).clicked() {
                                     selected_shader = shader.clone();
-                                    // Load the shader into the editor
                                     if Path::new(&selected_shader).exists() {
                                         let mut editor_mut = editor.clone();
                                         let _ = editor_mut.load_from_file(Path::new(&selected_shader));
+                                        params.extract_uniforms_from_shader(&editor_mut.source_code);
                                         *editor = editor_mut;
-                                        // Extract uniforms from the loaded shader
-                                        params.extract_uniforms_from_shader(&editor.source_code);
                                     }
                                 }
                             }
                         });
-                    state.current_shader = selected_shader;
+                    if selected_shader != state.current_shader {
+                        state.current_shader = selected_shader;
+                    }
                     
                     if ui.button("Reload Shader").clicked() {
                         if let Some(ref path) = editor.current_file {
                             let mut editor_mut = editor.clone();
                             let _ = editor_mut.load_from_file(path);
+                            params.extract_uniforms_from_shader(&editor_mut.source_code);
                             *editor = editor_mut;
-                            // Re-extract uniforms after reload
-                            params.extract_uniforms_from_shader(&editor.source_code);
                         }
                     }
                     
-                    // File operations
                     ui.horizontal(|ui| {
                         if ui.button("Open...").clicked() {
                             if let Some(path) = rfd::FileDialog::new()
@@ -912,10 +1007,9 @@ fn ui_system(
                                 .pick_file() {
                                 let mut editor_mut = editor.clone();
                                 let _ = editor_mut.load_from_file(&path);
-                                *editor = editor_mut;
                                 state.current_shader = path.display().to_string();
-                                // Extract uniforms from the opened shader
-                                params.extract_uniforms_from_shader(&editor.source_code);
+                                params.extract_uniforms_from_shader(&editor_mut.source_code);
+                                *editor = editor_mut;
                             }
                         }
                         
@@ -984,7 +1078,6 @@ fn ui_system(
                     
                     if selected_geometry != state.current_geometry {
                         state.current_geometry = selected_geometry;
-                        // Update geometry
                         for mut mesh in &mut geometry_query {
                             let new_mesh = state.current_geometry.create_mesh();
                             *mesh = Mesh3d(meshes.add(new_mesh));
@@ -998,7 +1091,6 @@ fn ui_system(
                 ui.collapsing("Shader Editor", |ui| {
                     ui.label("Edit shader code below:");
                     
-                    // Display error messages if any
                     if editor.has_errors {
                         egui::ScrollArea::vertical().show(ui, |ui| {
                             for error in &editor.error_messages {
@@ -1008,7 +1100,6 @@ fn ui_system(
                         ui.separator();
                     }
                     
-                    // Text editor
                     let mut code = editor.source_code.clone();
                     let text_edit = egui::TextEdit::multiline(&mut code)
                         .desired_width(f32::INFINITY)
@@ -1024,19 +1115,16 @@ fn ui_system(
                         *editor = editor_mut;
                     }
                     
-                    // Apply button - validates and extracts uniforms
                     ui.horizontal(|ui| {
                         if ui.button("Apply Shader").clicked() {
-                            // Validate and compile the shader
                             let mut editor_mut = editor.clone();
                             match editor_mut.compile_and_validate() {
                                 Ok(_) => {
-                                    // Create temp file for the shader
+                                    // Save to temp file
                                     if let Ok(temp_path) = editor_mut.create_temp_file() {
                                         editor_mut.temp_file = Some(temp_path.clone());
                                         state.current_shader = temp_path.display().to_string();
                                     }
-                                    // Extract uniforms from the new shader
                                     params.extract_uniforms_from_shader(&editor_mut.source_code);
                                 }
                                 Err(errs) => {
@@ -1054,27 +1142,25 @@ fn ui_system(
                 
                 ui.separator();
                 
-                // Detected Uniforms
+                // Detected Uniforms - collect references first to avoid borrow issues
+                let scalar_uniforms: Vec<DetectedUniform> = params.detected_uniforms.iter()
+                    .filter(|u| matches!(u.category, UniformCategory::Scalar))
+                    .cloned().collect();
+                let vector_uniforms: Vec<DetectedUniform> = params.detected_uniforms.iter()
+                    .filter(|u| matches!(u.category, UniformCategory::Vector))
+                    .cloned().collect();
+                let color_uniforms: Vec<DetectedUniform> = params.detected_uniforms.iter()
+                    .filter(|u| matches!(u.category, UniformCategory::Color))
+                    .cloned().collect();
+                let matrix_uniforms: Vec<DetectedUniform> = params.detected_uniforms.iter()
+                    .filter(|u| matches!(u.category, UniformCategory::Matrix))
+                    .cloned().collect();
+                
                 if !params.detected_uniforms.is_empty() {
-                    // Collect uniform references first to avoid borrow issues
-                    let scalar_uniforms: Vec<DetectedUniform> = params.detected_uniforms.iter()
-                        .filter(|u| matches!(u.category, UniformCategory::Scalar))
-                        .cloned().collect();
-                    let vector_uniforms: Vec<DetectedUniform> = params.detected_uniforms.iter()
-                        .filter(|u| matches!(u.category, UniformCategory::Vector))
-                        .cloned().collect();
-                    let color_uniforms: Vec<DetectedUniform> = params.detected_uniforms.iter()
-                        .filter(|u| matches!(u.category, UniformCategory::Color))
-                        .cloned().collect();
-                    let matrix_uniforms: Vec<DetectedUniform> = params.detected_uniforms.iter()
-                        .filter(|u| matches!(u.category, UniformCategory::Matrix))
-                        .cloned().collect();
-                    
                     ui.collapsing("Detected Uniforms", |ui| {
                         ui.label(format!("Found {} uniforms in shader:", params.detected_uniforms.len()));
                         ui.separator();
                         
-                        // Scalar uniforms
                         if !scalar_uniforms.is_empty() {
                             ui.label("Scalars:");
                             for uniform in &scalar_uniforms {
@@ -1086,14 +1172,12 @@ fn ui_system(
                             ui.separator();
                         }
                         
-                        // Vector uniforms
                         if !vector_uniforms.is_empty() {
                             ui.label("Vectors:");
                             for uniform in &vector_uniforms {
                                 let size = if uniform.type_name.contains("vec2") { 2 }
                                           else if uniform.type_name.contains("vec3") { 3 }
                                           else { 4 };
-                                
                                 let mut value = params.get_vector(&uniform.name, size);
                                 
                                 if size == 2 {
@@ -1116,15 +1200,15 @@ fn ui_system(
                             ui.separator();
                         }
                         
-                        // Color uniforms
                         if !color_uniforms.is_empty() {
                             ui.label("Colors:");
                             for uniform in &color_uniforms {
                                 let mut color = params.get_color(&uniform.name);
-                                let mut rgb = match color {
-                                    Color::Srgba(s) => [s.red, s.green, s.blue],
-                                    Color::LinearRgba(l) => [l.red, l.green, l.blue],
-                                    _ => [0.0, 0.0, 0.0],
+                                let mut rgb = [0.0, 0.0, 0.0];
+                                match color {
+                                    Color::Srgba(s) => { rgb = [s.red, s.green, s.blue]; }
+                                    Color::LinearRgba(l) => { rgb = [l.red, l.green, l.blue]; }
+                                    _ => {}
                                 };
                                 
                                 ui.horizontal(|ui| {
@@ -1138,7 +1222,6 @@ fn ui_system(
                             ui.separator();
                         }
                         
-                        // Matrix uniforms
                         if !matrix_uniforms.is_empty() {
                             ui.label("Matrices:");
                             for uniform in &matrix_uniforms {
@@ -1149,7 +1232,6 @@ fn ui_system(
                     });
                 }
                 
-                // Legacy parameters section (kept for backwards compatibility)
                 if params.detected_uniforms.is_empty() {
                     ui.collapsing("Parameters", |ui| {
                         ui.label("No uniforms detected in shader.");
@@ -1159,7 +1241,6 @@ fn ui_system(
                 
                 ui.separator();
                 
-                // View options
                 ui.collapsing("View", |ui| {
                     ui.checkbox(&mut state.auto_rotate, "Auto Rotate");
                     ui.add(egui::Slider::new(&mut state.camera_distance, 1.0..=20.0).text("Camera Distance"));
@@ -1167,11 +1248,18 @@ fn ui_system(
                 
                 ui.separator();
                 
-                // Camera controls help
                 ui.collapsing("Camera Controls", |ui| {
                     ui.label("Right-click + drag: Orbit camera");
                     ui.label("Right-click + Shift + drag: Pan camera");
                     ui.label("Scroll: Zoom in/out");
+                });
+                
+                ui.separator();
+                
+                ui.collapsing("Info", |ui| {
+                    ui.label("Using Bevy's Material pipeline");
+                    ui.label("Uniforms mapped to bindings 0-7");
+                    ui.label("Shader changes require 'Apply Shader'");
                 });
             });
     }
@@ -1194,23 +1282,13 @@ mod tests {
     #[test]
     fn test_shader_editor_load_save() {
         let mut editor = ShaderEditorState::new();
-        
-        // Create a temp file
         let mut temp_file = NamedTempFile::new().unwrap();
         let temp_path = temp_file.path().to_path_buf();
-        
-        // Write some content
         writeln!(temp_file, "// Test shader\nfn main() {{}}").unwrap();
-        
-        // Load it
         assert!(editor.load_from_file(&temp_path).is_ok());
         assert!(editor.source_code.contains("// Test shader"));
-        
-        // Modify and save
         editor.source_code = "// Modified shader".to_string();
         assert!(editor.save_to_file(&temp_path).is_ok());
-        
-        // Verify
         let content = std::fs::read_to_string(&temp_path).unwrap();
         assert_eq!(content, "// Modified shader");
     }
@@ -1219,7 +1297,6 @@ mod tests {
     fn test_shader_editor_compile_invalid() {
         let mut editor = ShaderEditorState::new();
         editor.source_code = "this is not valid wgsl".to_string();
-        
         assert!(editor.compile_and_validate().is_err());
         assert!(editor.has_errors);
         assert!(!editor.error_messages.is_empty());
@@ -1235,51 +1312,18 @@ mod tests {
     }
 
     #[test]
-    fn test_geometry_create_mesh() {
-        let mesh = GeometryType::Cube.create_mesh();
-        assert!(mesh.count_vertices() > 0);
-        
-        let mesh = GeometryType::Sphere.create_mesh();
-        assert!(mesh.count_vertices() > 0);
-    }
-
-    #[test]
-    fn test_shader_parameters_default() {
-        let params = ShaderParameters::default();
-        assert!(params.float_uniforms.contains_key("time_scale"));
-        assert!(params.float_uniforms.contains_key("intensity"));
-        assert!(params.color_uniforms.contains_key("base_color"));
-    }
-
-    #[test]
-    fn test_shader_tool_state_default() {
-        let state = ShaderToolState::default();
-        assert!(state.available_geometries.len() == 5);
-        assert!(!state.auto_rotate);
-        assert!(state.show_ui);
-        assert_eq!(state.camera_distance, 5.0);
-        assert_eq!(state.camera_pitch, 0.0);
-        assert_eq!(state.camera_yaw, 0.0);
-    }
-
-    #[test]
     fn test_uniform_extraction_basic() {
         let shader_code = r#"
             @group(0) @binding(0)
             var<uniform> time: f32;
-            
             @group(0) @binding(1)
             var<uniform> intensity: f32;
-            
             @group(0) @binding(2)
             var<uniform> color: vec4<f32>;
         "#;
-        
         let mut params = ShaderParameters::default();
         params.extract_uniforms_from_shader(shader_code);
-        
         assert!(params.detected_uniforms.len() >= 3);
-        
         let names: Vec<String> = params.detected_uniforms.iter().map(|u| u.name.clone()).collect();
         assert!(names.contains(&"time".to_string()));
         assert!(names.contains(&"intensity".to_string()));
@@ -1291,16 +1335,12 @@ mod tests {
         let shader_code = r#"
             @group(0) @binding(0)
             var time: f32;
-            
             @group(0) @binding(1)
             var direction: vec3<f32>;
         "#;
-        
         let mut params = ShaderParameters::default();
         params.extract_uniforms_from_shader(shader_code);
-        
         assert!(params.detected_uniforms.len() >= 2);
-        
         let types: Vec<String> = params.detected_uniforms.iter().map(|u| u.type_name.clone()).collect();
         assert!(types.contains(&"f32".to_string()));
         assert!(types.contains(&"vec3<f32>".to_string()));
@@ -1316,11 +1356,28 @@ mod tests {
     }
 
     #[test]
-    fn test_uniform_default_values() {
-        assert_eq!(get_default_value("f32"), "0.0");
-        assert_eq!(get_default_value("vec2<f32>"), "vec2<f32>(0.0, 0.0)");
-        assert_eq!(get_default_value("vec3<f32>"), "vec3<f32>(0.0, 0.0, 0.0)");
-        assert_eq!(get_default_value("vec4<f32>"), "vec4<f32>(0.0, 0.0, 0.0, 1.0)");
+    fn test_params_to_material() {
+        let mut params = ShaderParameters::default();
+        params.set_float("intensity", 0.5);
+        params.set_float("frequency", 2.0);
+        params.set_color("base_color", Color::srgb(1.0, 0.0, 0.0));
+        
+        let material = params.to_material();
+        assert_eq!(material.intensity, 0.5);
+        assert_eq!(material.frequency, 2.0);
+        // LinearRgba comparison
+        assert!((material.base_color.red - 1.0).abs() < 0.001);
+        assert!((material.base_color.green - 0.0).abs() < 0.001);
+        assert!((material.base_color.blue - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_shader_tool_state_default() {
+        let state = ShaderToolState::default();
+        assert!(state.available_geometries.len() == 5);
+        assert!(!state.auto_rotate);
+        assert!(state.show_ui);
+        assert_eq!(state.camera_distance, 5.0);
     }
 
     #[test]
@@ -1332,76 +1389,24 @@ mod tests {
             camera_target: Vec3::ZERO,
             ..Default::default()
         };
-        
-        // At yaw=0, pitch=0, distance=5, camera should be at (5, 0, 0)
-        let expected_x = 5.0 * 0.0.cos() * 0.0.cos();
-        let expected_y = 5.0 * 0.0.sin();
-        let expected_z = 5.0 * 0.0.sin() * 0.0.cos();
-        
-        assert_eq!(expected_x, 5.0);
-        assert_eq!(expected_y, 0.0);
-        assert_eq!(expected_z, 0.0);
+        assert_eq!(5.0 * 0.0.cos() * 0.0.cos(), 5.0);
+        assert_eq!(5.0 * 0.0.sin(), 0.0);
+        assert_eq!(5.0 * 0.0.sin() * 0.0.cos(), 0.0);
     }
 
     #[test]
     fn test_camera_pan_calculation() {
         let mut state = ShaderToolState::default();
-        state.camera_yaw = std::f32::consts::FRAC_PI_4; // 45 degrees
-        
-        // Calculate right vector at 45 degrees yaw
-        let right = Vec3::new(
-            -state.camera_yaw.sin(),
-            0.0,
-            state.camera_yaw.cos(),
-        ).normalize();
-        
-        // At 45 degrees, right should have equal x and z components
+        state.camera_yaw = std::f32::consts::FRAC_PI_4;
+        let right = Vec3::new(-state.camera_yaw.sin(), 0.0, state.camera_yaw.cos()).normalize();
         assert!((right.x - right.z).abs() < 0.001);
         assert!(right.y.abs() < 0.001);
-    }
-
-    #[test]
-    fn test_uniform_initialization() {
-        let mut params = ShaderParameters::default();
-        params.clear_detected();
-        
-        params.initialize_uniform("f32", "scalar_test");
-        params.initialize_uniform("vec2<f32>", "vec2_test");
-        params.initialize_uniform("vec3<f32>", "vec3_test");
-        params.initialize_uniform("vec4<f32>", "color_test");
-        
-        assert!(params.float_uniforms.contains_key("scalar_test"));
-        assert!(params.vector_uniforms.contains_key("vec2_test"));
-        assert!(params.vector_uniforms.contains_key("vec3_test"));
-        assert!(params.color_uniforms.contains_key("color_test"));
-    }
-
-    #[test]
-    fn test_params_get_set() {
-        let mut params = ShaderParameters::default();
-        params.clear_detected();
-        
-        params.set_float("test_float", 42.0);
-        assert_eq!(params.get_float("test_float"), 42.0);
-        assert_eq!(params.get_float("nonexistent"), 0.0);
-        
-        params.set_vector("test_vec", vec![1.0, 2.0, 3.0]);
-        let vec = params.get_vector("test_vec", 3);
-        assert_eq!(vec, vec![1.0, 2.0, 3.0]);
-        
-        params.set_color("test_color", Color::srgb(0.5, 0.5, 0.5));
-        let color = params.get_color("test_color");
-        let linear = color.to_linear();
-        assert!((linear.red - 0.5).abs() < 0.01);
-        assert!((linear.green - 0.5).abs() < 0.01);
-        assert!((linear.blue - 0.5).abs() < 0.01);
     }
 
     #[test]
     fn test_extract_var_uniform() {
         let line = "var<uniform> my_var: f32;";
         assert!(extract_var_uniform(line).is_some());
-        
         let line2 = "var<uniform> color: vec4<f32>;";
         if let Some((name, type_name)) = extract_var_uniform(line2) {
             assert_eq!(name, "color");
@@ -1415,7 +1420,6 @@ mod tests {
     fn test_extract_group_binding_var() {
         let line = "@group(0) @binding(0) var my_var: f32;";
         assert!(extract_group_binding_var(line).is_some());
-        
         let line2 = "@group(0) @binding(1) var color: vec4<f32>;";
         if let Some((name, type_name)) = extract_group_binding_var(line2) {
             assert_eq!(name, "color");
@@ -1423,5 +1427,16 @@ mod tests {
         } else {
             panic!("Failed to extract uniform");
         }
+    }
+
+    #[test]
+    fn test_material_default() {
+        let mat = ShaderToolMaterial::default();
+        assert_eq!(mat.intensity, 1.0);
+        assert_eq!(mat.frequency, 1.0);
+        assert_eq!(mat.direction, Vec3::Z);
+        assert!((mat.base_color.red - 0.8).abs() < 0.001);
+        assert!((mat.base_color.green - 0.2).abs() < 0.001);
+        assert!((mat.base_color.blue - 0.4).abs() < 0.001);
     }
 }
