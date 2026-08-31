@@ -19,6 +19,7 @@ bevy = { version = "0.19.1", default-features = false, features = [
     "zstd_rust",
     "default_font",
 ] }
+bevy_egui = "0.42.0"
 
 [[bin]]
 name = "bevy-hello-world"
