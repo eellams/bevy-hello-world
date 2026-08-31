@@ -1,4 +1,4 @@
-//! Shader Testing Tools Entry Point - Debug font loading
+//! Shader Testing Tools Entry Point - Test with ONLY Camera2d
 //!
 //! Run with: cargo run --bin shader-tools
 
@@ -9,14 +9,12 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, (rotate_cube, debug_text_system, debug_node_system, debug_text2d_system, debug_font_assets))
+        .add_systems(Update, (debug_text_system, debug_node_system, debug_text2d_system, debug_font_assets))
         .run();
 }
 
 fn setup(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
 ) {
     println!("DEBUG: Setup called");
@@ -26,86 +24,48 @@ fn setup(
     let default_font_handle: Handle<Font> = asset_server.load("embedded://FiraMono-subset.ttf");
     println!("DEBUG: Default font handle: {:?}", default_font_handle);
     
-    // 3D Camera for the cube
+    // ONLY use Camera2d - no 3D camera
+    println!("DEBUG: Spawning 2D camera ONLY");
     commands.spawn((
-        Camera3d::default(),
-        Transform::from_xyz(0.0, 0.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
-        Name::new("3D Camera"),
-    ));
-    
-    println!("DEBUG: Spawning 2D camera");
-    
-    // 2D Camera for UI overlay
-    commands.spawn((
-        Camera {
-            order: 1,
-            clear_color: ClearColorConfig::None,
-            ..default()
-        },
         Camera2d,
-        Name::new("UI Camera"),
+        Name::new("2D Camera"),
     ));
     
-    println!("DEBUG: Spawning light");
+    println!("DEBUG: Spawning UI text at center");
     
-    // Light
+    // Spawn text at center of screen - simple as possible
     commands.spawn((
-        PointLight {
-            intensity: 1000.0,
-            ..default()
-        },
-        Transform::from_xyz(2.0, 2.0, 2.0),
-        Name::new("Light"),
-    ));
-    
-    println!("DEBUG: Spawning cube");
-    
-    // A cube with bright color
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(1.0, 0.0, 0.0),
-            ..default()
-        })),
-        Transform::from_xyz(0.0, 0.0, 0.0),
-        Name::new("Cube"),
-    ));
-    
-    println!("DEBUG: Spawning UI");
-    
-    // Try Text2d with explicit default font handle
-    commands.spawn((
-        Text2d::new("TEXT2D - BRIGHT GREEN"),
+        Text2d::new("HELLO WORLD - BRIGHT WHITE"),
         TextFont {
             font: FontSource::Handle(Handle::default()),
-            font_size: FontSize::Px(128.0),
+            font_size: FontSize::Px(64.0),
             ..default()
         },
-        TextColor(Color::srgb(0.0, 1.0, 0.0)),
-        Transform::from_xyz(0.0, 0.0, 10.0),
+        TextColor(Color::srgb(1.0, 1.0, 1.0)),
+        Transform::from_xyz(0.0, 0.0, 0.0),
         Name::new("Text2d"),
     ));
     
-    // Also try UI text with explicit default font handle
+    // Also try UI text
     commands.spawn((
         Node {
             position_type: PositionType::Absolute,
             left: Val::Px(0.0),
-            right: Val::Px(0.0),
-            top: Val::Px(0.0),
-            bottom: Val::Px(0.0),
+            top: Val::Px(100.0),
+            width: Val::Px(400.0),
+            height: Val::Px(100.0),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(Color::srgb(0.5, 0.0, 0.0)),
-        Name::new("Fullscreen UI Panel"),
+        BackgroundColor(Color::srgb(0.0, 0.0, 0.5)),
+        Name::new("UI Panel"),
     )).with_children(|parent| {
         parent.spawn((
-            Text::new("UI TEXT - BRIGHT YELLOW"),
+            Text::new("UI TEXT TEST"),
             TextFont {
                 font: FontSource::Handle(Handle::default()),
-                font_size: FontSize::Px(128.0),
+                font_size: FontSize::Px(48.0),
                 ..default()
             },
             TextColor(Color::srgb(1.0, 1.0, 0.0)),
@@ -114,15 +74,6 @@ fn setup(
     });
     
     println!("DEBUG: Setup complete");
-}
-
-fn rotate_cube(
-    time: Res<Time>,
-    mut query: Query<&mut Transform, With<Mesh3d>>,
-) {
-    for mut transform in &mut query {
-        transform.rotate_y(time.delta_secs() * 0.5);
-    }
 }
 
 /// Debug system to print text entity info
