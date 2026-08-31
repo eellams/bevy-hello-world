@@ -3,14 +3,15 @@
 //! Run with: cargo run --bin shader-tools
 
 use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
+use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(EguiPlugin::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, (rotate_cube, ui_system))
+        .add_systems(EguiPrimaryContextPass, ui_system)
+        .add_systems(Update, rotate_cube)
         .run();
 }
 
