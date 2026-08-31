@@ -154,6 +154,7 @@ impl Plugin for ShaderToolPlugin {
                 handle_camera_controls,
                 update_materials_from_params,
                 update_point_light,
+                update_ambient_light,
                 sync_lighting_to_shader_params,
             ))
             ;
@@ -678,6 +679,9 @@ pub struct ToolCamera;
 #[derive(Component)]
 pub struct PointLightMarker;
 
+#[derive(Component)]
+pub struct AmbientLightMarker;
+
 /// Marker for which material type an entity uses
 #[derive(Component)]
 pub enum EntityMaterialType {
@@ -688,6 +692,7 @@ pub enum EntityMaterialType {
 fn update_materials_from_params(
     mat_params: Res<MaterialParameters>,
     shader_params: Res<ShaderParameters>,
+    lighting_params: Res<LightingParameters>,
     mut materials_std: ResMut<Assets<StandardMaterial>>,
     mut materials_shader: ResMut<Assets<ShaderToolMaterial>>,
     query: Query<(Entity, &EntityMaterialType)>, 
@@ -700,7 +705,20 @@ fn update_materials_from_params(
                 commands.entity(entity).insert(MeshMaterial3d(materials_std.add(new_material)));
             }
             EntityMaterialType::ShaderTool => {
-                let new_material = shader_params.to_shader_material();
+                let mut updated_shader_params = shader_params.clone();
+                updated_shader_params.color_uniforms.insert("ambient_color".to_string(), lighting_params.ambient_color);
+                updated_shader_params.float_uniforms.insert("ambient_intensity".to_string(), lighting_params.ambient_intensity);
+                updated_shader_params.vector_uniforms.insert("point_light_position".to_string(), 
+                    vec![lighting_params.point_light_position.x, 
+                         lighting_params.point_light_position.y, 
+                         lighting_params.point_light_position.z]);
+                updated_shader_params.color_uniforms.insert("point_light_color".to_string(), lighting_params.point_light_color);
+                updated_shader_params.float_uniforms.insert("point_light_intensity".to_string(), lighting_params.point_light_intensity);
+                updated_shader_params.float_uniforms.insert("point_light_radius".to_string(), lighting_params.point_light_radius);
+                updated_shader_params.float_uniforms.insert("use_point_light".to_string(), if lighting_params.use_point_light { 1.0 } else { 0.0 });
+                updated_shader_params.float_uniforms.insert("use_ambient_light".to_string(), if lighting_params.use_ambient_light { 1.0 } else { 0.0 });
+                
+                let new_material = updated_shader_params.to_shader_material();
                 commands.entity(entity).insert(MeshMaterial3d(materials_shader.add(new_material)));
             }
         }
@@ -754,6 +772,18 @@ fn setup_tool(
         Name::new("Tool Camera"),
     ));
     
+    // Spawn ambient light for Bevy's PBR lighting
+    commands.spawn((
+        AmbientLight {
+            color: lighting_params.ambient_color,
+            brightness: lighting_params.ambient_intensity,
+            ..default()
+        },
+        Name::new("Ambient Light"),
+        AmbientLightMarker,
+    ));
+    
+    // Spawn point light for Bevy's PBR lighting
     commands.spawn((
         PointLight {
             color: lighting_params.point_light_color,
@@ -853,6 +883,16 @@ fn update_point_light(
         light.color = lighting_params.point_light_color;
         light.intensity = lighting_params.point_light_intensity;
         light.range = lighting_params.point_light_radius;
+    }
+}
+
+fn update_ambient_light(
+    lighting_params: Res<LightingParameters>,
+    mut query: Query<&mut AmbientLight, With<AmbientLightMarker>>,
+) {
+    for mut light in &mut query {
+        light.color = lighting_params.ambient_color;
+        light.brightness = lighting_params.ambient_intensity;
     }
 }
 
