@@ -196,7 +196,7 @@ fn test_default_lighting_shader_exists() {
     
     // Create a placeholder image since we can't compile this standalone
     let img = create_solid_color_render(Rgba([50, 100, 200, 255]));
-    save_and_compare("default_lighting_shader", || img);
+    save_and_compare("test_default_lighting_shader_exists", || img);
 }
 
 /// Test that the shader tool shader file exists and has expected content
@@ -214,7 +214,7 @@ fn test_shader_tool_shader_exists() {
     
     // Create a placeholder image since we can't compile this standalone
     let img = create_solid_color_render(Rgba([80, 150, 80, 255]));
-    save_and_compare("shader_tool_shader", || img);
+    save_and_compare("test_shader_tool_shader_exists", || img);
 }
 
 /// Test that test_shader.wgsl file exists
@@ -228,7 +228,7 @@ fn test_test_shader_exists() {
     assert!(shader_code.contains("time"));
     
     let img = create_solid_color_render(Rgba([100, 150, 200, 255]));
-    save_and_compare("test_shader", || img);
+    save_and_compare("test_test_shader_exists", || img);
 }
 
 /// Test that color_shader.wgsl file exists
@@ -241,7 +241,7 @@ fn test_color_shader_exists() {
     assert!(shader_code.contains("hue_shift"));
     
     let img = create_solid_color_render(Rgba([200, 100, 50, 255]));
-    save_and_compare("color_shader", || img);
+    save_and_compare("test_color_shader_exists", || img);
 }
 
 /// Test that pattern_shader.wgsl file exists
@@ -254,7 +254,7 @@ fn test_pattern_shader_exists() {
     assert!(shader_code.contains("pattern_type"));
     
     let img = create_solid_color_render(Rgba([150, 100, 200, 255]));
-    save_and_compare("pattern_shader", || img);
+    save_and_compare("test_pattern_shader_exists", || img);
 }
 
 /// Test that a simple standalone WGSL shader compiles
@@ -293,7 +293,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     assert!(result.is_ok(), "Simple standalone shader should compile: {:?}", result);
     
     let img = create_solid_color_render(Rgba([100, 180, 100, 255]));
-    save_and_compare("simple_standalone_shader", || img);
+    save_and_compare("test_simple_standalone_shader_compilation", || img);
 }
 
 // ============================================================================
@@ -318,7 +318,7 @@ fn test_base_color_uniform_change() {
     
     // Create a test image representing red output
     let img = create_solid_color_render(Rgba([255, 0, 0, 255]));
-    save_and_compare("base_color_red", || img);
+    save_and_compare("test_base_color_uniform_change", || img);
 }
 
 /// Test that changing intensity affects the render output
@@ -334,7 +334,7 @@ fn test_intensity_uniform_change() {
     
     // Create a brighter test image
     let img = create_solid_color_render(Rgba([200, 50, 50, 255]));
-    save_and_compare("intensity_high", || img);
+    save_and_compare("test_intensity_uniform_change", || img);
 }
 
 /// Test that changing frequency affects the render output
@@ -356,7 +356,7 @@ fn test_frequency_uniform_change() {
             Rgba([0, 0, 255, 255])
         }
     });
-    save_and_compare("frequency_high", || img);
+    save_and_compare("test_frequency_uniform_change", || img);
 }
 
 /// Test that changing direction affects the render output
@@ -372,7 +372,7 @@ fn test_direction_uniform_change() {
     
     // Create a horizontal gradient
     let img = create_gradient_render(Rgba([255, 0, 0, 255]), Rgba([0, 0, 255, 255]), true);
-    save_and_compare("direction_x", || img);
+    save_and_compare("test_direction_uniform_change", || img);
 }
 
 /// Test that changing all uniforms produces a unique render
@@ -405,7 +405,7 @@ fn test_all_uniforms_changed() {
         let b = ((x * 3 + y * 3) % 256) as u8;
         Rgba([r, g, b, 255])
     });
-    save_and_compare("all_uniforms_changed", || img);
+    save_and_compare("test_all_uniforms_changed", || img);
 }
 
 // ============================================================================
@@ -425,7 +425,7 @@ fn test_standard_material_default() {
     
     // Create test image for default material (purplish-red)
     let img = create_solid_color_render(Rgba([204, 51, 102, 255]));
-    save_and_compare("standard_material_default", || img);
+    save_and_compare("test_standard_material_default", || img);
 }
 
 /// Test StandardMaterial with metallic surface
@@ -440,7 +440,7 @@ fn test_standard_material_metallic() {
     
     // Create shiny silver test image
     let img = create_solid_color_render(Rgba([200, 200, 200, 255]));
-    save_and_compare("standard_material_metallic", || img);
+    save_and_compare("test_standard_material_metallic", || img);
 }
 
 /// Test StandardMaterial with rough surface
@@ -455,7 +455,7 @@ fn test_standard_material_rough() {
     
     // Create matte gray test image
     let img = create_solid_color_render(Rgba([128, 128, 128, 255]));
-    save_and_compare("standard_material_rough", || img);
+    save_and_compare("test_standard_material_rough", || img);
 }
 
 /// Test StandardMaterial with emissive
@@ -470,7 +470,7 @@ fn test_standard_material_emissive() {
     
     // Create glowing orange test image
     let img = create_solid_color_render(Rgba([255, 128, 0, 255]));
-    save_and_compare("standard_material_emissive", || img);
+    save_and_compare("test_standard_material_emissive", || img);
 }
 
 // ============================================================================
@@ -487,7 +487,7 @@ fn test_ambient_light_only() {
     
     // Create a flat lit test image
     let img = create_solid_color_render(Rgba([128, 128, 128, 255]));
-    save_and_compare("ambient_light_only", || img);
+    save_and_compare("test_ambient_light_only", || img);
 }
 
 /// Test point light only
@@ -508,7 +508,7 @@ fn test_point_light_only() {
         let intensity = ((1.0 - dist.clamp(0.0, 1.0)) * 2000.0).clamp(0.0, 255.0) as u8;
         Rgba([intensity, (intensity as f32 * 0.8) as u8, (intensity as f32 * 0.6) as u8, 255])
     });
-    save_and_compare("point_light_only", || img);
+    save_and_compare("test_point_light_only", || img);
 }
 
 /// Test both ambient and point light
@@ -519,7 +519,7 @@ fn test_both_lights() {
     
     // Create a well-lit test image
     let img = create_solid_color_render(Rgba([180, 160, 140, 255]));
-    save_and_compare("both_lights", || img);
+    save_and_compare("test_both_lights", || img);
 }
 
 /// Test colored point light
@@ -538,7 +538,7 @@ fn test_colored_point_light() {
         let intensity = ((1.0 - dist.clamp(0.0, 1.0)) * 1500.0).clamp(0.0, 255.0) as u8;
         Rgba([0, intensity, 0, 255])
     });
-    save_and_compare("colored_point_light", || img);
+    save_and_compare("test_colored_point_light", || img);
 }
 
 // ============================================================================
@@ -553,7 +553,7 @@ fn test_geometry_cube() {
     
     // Create a test image representing a cube (simplified)
     let img = create_solid_color_render(Rgba([100, 150, 200, 255]));
-    save_and_compare("geometry_cube", || img);
+    save_and_compare("test_geometry_cube", || img);
 }
 
 /// Test rendering with sphere geometry
@@ -563,7 +563,7 @@ fn test_geometry_sphere() {
     assert!(sphere.count_vertices() > 100); // Sphere should have many vertices
     
     let img = create_solid_color_render(Rgba([200, 100, 100, 255]));
-    save_and_compare("geometry_sphere", || img);
+    save_and_compare("test_geometry_sphere", || img);
 }
 
 /// Test rendering with plane geometry
@@ -573,7 +573,7 @@ fn test_geometry_plane() {
     assert!(plane.count_vertices() > 0);
     
     let img = create_solid_color_render(Rgba([100, 200, 100, 255]));
-    save_and_compare("geometry_plane", || img);
+    save_and_compare("test_geometry_plane", || img);
 }
 
 /// Test rendering with torus geometry
@@ -583,7 +583,7 @@ fn test_geometry_torus() {
     assert!(torus.count_vertices() > 0);
     
     let img = create_solid_color_render(Rgba([150, 100, 200, 255]));
-    save_and_compare("geometry_torus", || img);
+    save_and_compare("test_geometry_torus", || img);
 }
 
 /// Test rendering with capsule geometry
@@ -593,7 +593,7 @@ fn test_geometry_capsule() {
     assert!(capsule.count_vertices() > 0);
     
     let img = create_solid_color_render(Rgba([200, 200, 100, 255]));
-    save_and_compare("geometry_capsule", || img);
+    save_and_compare("test_geometry_capsule", || img);
 }
 
 // ============================================================================
@@ -620,7 +620,7 @@ fn test_complete_shader_tool_scene() {
         let b = ((x + y * 4) % 256) as u8;
         Rgba([r, g, b, 255])
     });
-    save_and_compare("complete_scene", || img);
+    save_and_compare("test_complete_shader_tool_scene", || img);
 }
 
 /// Test scene with different geometry and material
@@ -641,5 +641,5 @@ fn test_alternative_scene() {
         let b = ((x + y * 2) % 256) as u8;
         Rgba([r, g, b, 255])
     });
-    save_and_compare("alternative_scene", || img);
+    save_and_compare("test_alternative_scene", || img);
 }
