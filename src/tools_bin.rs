@@ -1,4 +1,4 @@
-//! Shader Testing Tools Entry Point - Debug text rendering
+//! Shader Testing Tools Entry Point - Use explicit font family
 //!
 //! Run with: cargo run --bin shader-tools
 
@@ -16,6 +16,7 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
 ) {
     println!("DEBUG: Setup called");
     
@@ -83,10 +84,14 @@ fn setup(
         Name::new("UI Panel"),
     )).with_children(|parent| {
         println!("DEBUG: Spawning text as child");
-        // Text as child
+        // Text as child - using explicit font like the example
+        let font = asset_server.load("fonts/FiraMono-Medium.ttf");
         parent.spawn((
             Text::new("HELLO WORLD - WHITE TEXT"),
-            TextFont::default(),
+            TextFont {
+                font: font.into(),
+                ..default()
+            },
             TextColor(Color::WHITE),
             Node {
                 ..default()
