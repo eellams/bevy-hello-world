@@ -474,7 +474,7 @@ pub enum UniformCategory {
     Unknown,
 }
 
-fn classify_uniform_type(type_name: &str) -> UniformCategory {
+pub fn classify_uniform_type(type_name: &str) -> UniformCategory {
     let type_lower = type_name.to_lowercase();
     
     if type_lower.contains("vec4") {
