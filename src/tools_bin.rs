@@ -1,8 +1,9 @@
-//! Shader Testing Tools Entry Point - Use explicit font family
+//! Shader Testing Tools Entry Point - Use generic font family
 //!
 //! Run with: cargo run --bin shader-tools
 
 use bevy::prelude::*;
+use bevy::text::{FontSource, FontSize};
 
 fn main() {
     App::new()
@@ -16,7 +17,6 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
 ) {
     println!("DEBUG: Setup called");
     
@@ -84,12 +84,12 @@ fn setup(
         Name::new("UI Panel"),
     )).with_children(|parent| {
         println!("DEBUG: Spawning text as child");
-        // Text as child - using explicit font like the example
-        let font = asset_server.load("fonts/FiraMono-Medium.ttf");
+        // Text as child - using generic font family name
         parent.spawn((
             Text::new("HELLO WORLD - WHITE TEXT"),
             TextFont {
-                font: font.into(),
+                font: FontSource::Family("Fira Mono".into()),
+                font_size: FontSize::Px(32.0),
                 ..default()
             },
             TextColor(Color::WHITE),
