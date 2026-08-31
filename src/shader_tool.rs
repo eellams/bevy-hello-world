@@ -107,7 +107,7 @@ impl Default for ShaderToolMaterial {
 
 impl Material for ShaderToolMaterial {
     fn fragment_shader() -> ShaderRef {
-        "assets/shaders/lighting_shader.wgsl".into()
+        "assets/shaders/current.wgsl".into()
     }
     
     fn alpha_mode(&self) -> AlphaMode {
@@ -847,7 +847,7 @@ fn spawn_test_geometry(
 fn scan_for_shaders(state: &mut ResMut<ToolState>) {
     state.available_shaders = vec![
         "assets/shaders/shader_tool.wgsl".to_string(),
-        "assets/shaders/lighting_shader.wgsl".to_string(),
+        "assets/shaders/current.wgsl".to_string(),
         "shaders/test_shader.wgsl".to_string(),
         "shaders/animate_shader.wgsl".to_string(),
         "shaders/color_shader.wgsl".to_string(),
@@ -1174,6 +1174,10 @@ fn shader_ui(
                         if Path::new(&selected_shader).exists() {
                             editor.load_from_file(Path::new(&selected_shader)).ok();
                             shader_params.extract_uniforms_from_shader(&editor.source_code);
+                            // Copy the selected shader to current.wgsl for hot-reloading
+                            if let Ok(shader_code) = std::fs::read_to_string(&selected_shader) {
+                                std::fs::write("assets/shaders/current.wgsl", &shader_code).ok();
+                            }
                         }
                     }
                 }
@@ -1199,27 +1203,24 @@ fn shader_ui(
                     editor.load_from_file(&path).ok();
                     state.current_shader = path.display().to_string();
                     shader_params.extract_uniforms_from_shader(&editor.source_code);
+                    // Copy to current.wgsl for live editing
+                    if let Ok(code) = std::fs::read_to_string(&path) {
+                        std::fs::write("assets/shaders/current.wgsl", &code).ok();
+                    }
                 }
             }
             
             if ui.button("Save").clicked() {
-                if let Some(ref path) = editor.current_file {
-                    if editor.save_to_file(path).is_err() {
-                        eprintln!("Save error");
-                    } else {
-                        editor.modified = false;
-                    }
+                // Always save to current.wgsl for live editing
+                if editor.save_to_file(Path::new("assets/shaders/current.wgsl")).is_err() {
+                    eprintln!("Save error");
                 } else {
-                    if let Some(path) = rfd::FileDialog::new()
-                        .add_filter("WGSL Shaders", &["wgsl"])
-                        .save_file() {
-                        if editor.save_to_file(&path).is_err() {
-                            eprintln!("Save error");
-                        } else {
-                            editor.current_file = Some(path);
-                            editor.modified = false;
-                        }
-                    }
+                    editor.modified = false;
+                }
+                
+                // Also save to original file if one was opened
+                if let Some(ref path) = editor.current_file {
+                    std::fs::write(path, &editor.source_code).ok();
                 }
             }
         });
