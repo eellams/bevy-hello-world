@@ -226,3 +226,75 @@ pub fn apply_slider_value_changes(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_slider_default() {
+        let slider = Slider::default();
+        assert_eq!(slider.min, 0.0);
+        assert_eq!(slider.max, 1.0);
+        assert_eq!(slider.value, 0.5);
+        assert_eq!(slider.track_width, 200.0);
+    }
+
+    #[test]
+    fn test_slider_new() {
+        let slider = Slider::new(0.0, 10.0, 5.0);
+        assert_eq!(slider.min, 0.0);
+        assert_eq!(slider.max, 10.0);
+        assert_eq!(slider.value, 5.0);
+    }
+
+    #[test]
+    fn test_slider_clamp_on_create() {
+        let slider = Slider::new(0.0, 10.0, 15.0);
+        assert_eq!(slider.value, 10.0); // Clamped to max
+    }
+
+    #[test]
+    fn test_slider_normalized() {
+        let slider = Slider::new(0.0, 100.0, 50.0);
+        assert_eq!(slider.normalized(), 0.5);
+    }
+
+    #[test]
+    fn test_slider_normalized_zero_range() {
+        let slider = Slider::new(5.0, 5.0, 5.0);
+        assert_eq!(slider.normalized(), 0.0);
+    }
+
+    #[test]
+    fn test_slider_set() {
+        let mut slider = Slider::new(0.0, 10.0, 5.0);
+        slider.set(7.5);
+        assert_eq!(slider.value, 7.5);
+    }
+
+    #[test]
+    fn test_slider_set_clamps() {
+        let mut slider = Slider::new(0.0, 10.0, 5.0);
+        slider.set(15.0);
+        assert_eq!(slider.value, 10.0); // Clamped to max
+        slider.set(-5.0);
+        assert_eq!(slider.value, 0.0); // Clamped to min
+    }
+
+    #[test]
+    fn test_slider_handle_position() {
+        let slider = Slider::new(0.0, 1.0, 0.5);
+        // At 50% with track_width=200: position = 0.5 * 200 - 10 = 90
+        assert_eq!(slider.handle_position(), 90.0);
+    }
+
+    #[test]
+    fn test_slider_value_changed_message() {
+        let msg = SliderValueChanged {
+            entity: Entity::PLACEHOLDER,
+            value: 0.75,
+        };
+        assert_eq!(msg.value, 0.75);
+    }
+}

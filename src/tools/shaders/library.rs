@@ -23,3 +23,15 @@ pub fn shader_hot_reload_system(
     // In a real implementation, this would watch for file changes
     // For now, this is a placeholder
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_shader_library_resource_default() {
+        let _library = ShaderLibraryResource::default();
+        // Verify it can be constructed
+        assert!(true); // Zero-sized type, just verify it compiles
+    }
+}

@@ -32,3 +32,23 @@ pub fn update_shader_parameters_system(
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_shader_parameters_default() {
+        let params = ShaderParameters::default();
+        assert_eq!(params.params, Vec4::ZERO);
+    }
+
+    #[test]
+    fn test_shader_parameters_clone() {
+        let params = ShaderParameters {
+            params: Vec4::new(1.0, 2.0, 3.0, 4.0),
+        };
+        let clone = params.clone();
+        assert_eq!(params.params, clone.params);
+    }
+}

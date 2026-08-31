@@ -3,12 +3,31 @@
 //! Run with: cargo run --bin shader-tools
 
 use bevy::prelude::*;
+use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiPrimaryContextPass};
+use tools::gui::slider::{spawn_slider, update_slider_handle_positions, slider_interaction_system, apply_slider_value_changes};
+use tools::shaders::testing::{ShaderLibrary, GeometryLibrary, setup_shader_testing_framework, shader_switching_system, update_shader_test_entities};
+
+mod tools {
+    pub mod gui {
+        pub mod slider;
+    }
+    pub mod shaders {
+        pub mod testing;
+        pub mod library;
+        pub mod material;
+    }
+}
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_systems(Startup, setup)
-        .add_systems(Update, rotate_cube)
+        .add_plugins(EguiPlugin::default())
+        .init_resource::<ShaderLibrary>()
+        .init_resource::<GeometryLibrary>()
+        .add_systems(Startup, (setup, setup_shader_testing_framework))
+        .add_systems(EguiPrimaryContextPass, ui_system)
+        .add_systems(Update, (rotate_cube, shader_switching_system, update_shader_test_entities))
+        .add_systems(Update, (update_slider_handle_positions, slider_interaction_system, apply_slider_value_changes).chain())
         .run();
 }
 
@@ -57,18 +76,8 @@ fn setup(
         Transform::from_xyz(0.0, 0.0, 0.0),
     ));
     
-    // Text - following the pattern from the example
-    commands.spawn((
-        Text::new("3D Cube with Shader\nThe cube is rotating"),
-        TextFont::default(),
-        TextColor(Color::WHITE),
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(10.0),
-            left: Val::Px(10.0),
-            ..default()
-        },
-    ));
+    // Spawn a slider for testing
+    spawn_slider(&mut commands, 0.0, 1.0, 0.5, 20.0, 200.0);
 }
 
 fn rotate_cube(
@@ -77,5 +86,18 @@ fn rotate_cube(
 ) {
     for mut transform in &mut query {
         transform.rotate_y(time.delta_secs() * 0.5);
+    }
+}
+
+fn ui_system(mut contexts: EguiContexts) {
+    if let Ok(ctx) = contexts.ctx_mut() {
+        egui::Window::new("Shader Tools")
+            .default_pos(egui::pos2(10.0, 10.0))
+            .show(ctx, |ui| {
+                ui.label("Shader Testing Tools");
+                ui.label("Use arrow keys to switch shaders/geometries");
+                ui.separator();
+                ui.label("Cube is rotating below");
+            });
     }
 }

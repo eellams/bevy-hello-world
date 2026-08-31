@@ -179,3 +179,101 @@ pub fn update_shader_test_entities(
         transform.translation.z = 0.0;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_shader_library_default() {
+        let library = ShaderLibrary::default();
+        assert!(library.shaders.is_empty());
+        assert_eq!(library.current_index, 0);
+    }
+
+    #[test]
+    fn test_shader_library_add() {
+        let mut library = ShaderLibrary::default();
+        library.add_shader("test.wgsl");
+        assert_eq!(library.shaders.len(), 1);
+        assert_eq!(library.shaders[0].path, "test.wgsl");
+    }
+
+    #[test]
+    fn test_shader_library_next() {
+        let mut library = ShaderLibrary::default();
+        library.add_shader("a.wgsl");
+        library.add_shader("b.wgsl");
+        library.add_shader("c.wgsl");
+        
+        assert_eq!(library.current_index, 0);
+        library.next();
+        assert_eq!(library.current_index, 1);
+        library.next();
+        assert_eq!(library.current_index, 2);
+        library.next(); // Wraps around
+        assert_eq!(library.current_index, 0);
+    }
+
+    #[test]
+    fn test_shader_library_previous() {
+        let mut library = ShaderLibrary::default();
+        library.add_shader("a.wgsl");
+        library.add_shader("b.wgsl");
+        library.add_shader("c.wgsl");
+        
+        library.current_index = 0;
+        library.previous(); // Wraps around
+        assert_eq!(library.current_index, 2);
+    }
+
+    #[test]
+    fn test_shader_library_current() {
+        let mut library = ShaderLibrary::default();
+        library.add_shader("a.wgsl");
+        library.add_shader("b.wgsl");
+        
+        assert!(library.current().is_some());
+        assert_eq!(library.current().unwrap().path, "a.wgsl");
+    }
+
+    #[test]
+    fn test_shader_library_current_empty() {
+        let library = ShaderLibrary::default();
+        assert!(library.current().is_none());
+    }
+
+    #[test]
+    fn test_geometry_library_default() {
+        let library = GeometryLibrary::default();
+        assert!(library.geometries.is_empty());
+        assert_eq!(library.current_index, 0);
+    }
+
+    #[test]
+    fn test_geometry_library_add() {
+        let mut library = GeometryLibrary::default();
+        library.add_geometry(Vec2::new(100.0, 100.0));
+        assert_eq!(library.geometries.len(), 1);
+        assert_eq!(library.geometries[0].size, Vec2::new(100.0, 100.0));
+    }
+
+    #[test]
+    fn test_geometry_library_next() {
+        let mut library = GeometryLibrary::default();
+        library.add_geometry(Vec2::new(100.0, 100.0));
+        library.add_geometry(Vec2::new(200.0, 200.0));
+        
+        assert_eq!(library.current_index, 0);
+        library.next();
+        assert_eq!(library.current_index, 1);
+        library.next(); // Wraps around
+        assert_eq!(library.current_index, 0);
+    }
+
+    #[test]
+    fn test_current_shader_default() {
+        let current = CurrentShader::default();
+        assert_eq!(current.shader_path, "shaders/test_shader.wgsl");
+    }
+}
