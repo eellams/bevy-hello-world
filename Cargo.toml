@@ -17,6 +17,7 @@ bevy = { version = "0.19.1", default-features = false, features = [
     "png",
     "x11",
     "zstd_rust",
+    "default_font",
 ] }
 
 [[bin]]
