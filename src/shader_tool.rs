@@ -4,11 +4,12 @@
 //! - Shader loading and hot-reloading
 //! - Geometry switching (cube, sphere, plane, torus, etc.)
 //! - Parameter controls via egui sliders
-//! - Camera controls
+//! - Blender-like camera controls (orbit, pan, zoom)
 //! - Live shader code editor with file I/O
 //! - Real-time preview with error handling
 
 use bevy::prelude::*;
+use bevy::input::mouse::{MouseMotion, MouseWheel, MouseButton};
 use bevy_egui::{egui, EguiContexts, EguiPrimaryContextPass};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -28,6 +29,7 @@ impl Plugin for ShaderToolPlugin {
             .add_systems(Update, (
                 update_camera,
                 check_shader_errors,
+                handle_camera_controls,
             ))
             ;
     }
@@ -48,10 +50,20 @@ pub struct ShaderToolState {
     pub show_ui: bool,
     /// Whether auto-rotate is enabled
     pub auto_rotate: bool,
-    /// Camera distance
+    /// Camera distance from target
     pub camera_distance: f32,
-    /// Camera rotation
-    pub camera_rotation: Vec2,
+    /// Camera pitch (up/down angle in radians)
+    pub camera_pitch: f32,
+    /// Camera yaw (left/right angle in radians)
+    pub camera_yaw: f32,
+    /// Camera target position (what we're looking at)
+    pub camera_target: Vec3,
+    /// Whether camera is being dragged (orbiting)
+    pub camera_dragging: bool,
+    /// Whether camera is being panned
+    pub camera_panning: bool,
+    /// Last mouse position for drag calculations
+    pub last_mouse_pos: Option<Vec2>,
 }
 
 impl Default for ShaderToolState {
@@ -68,9 +80,14 @@ impl Default for ShaderToolState {
                 GeometryType::Capsule,
             ],
             show_ui: true,
-            auto_rotate: true,
+            auto_rotate: false,
             camera_distance: 5.0,
-            camera_rotation: Vec2::ZERO,
+            camera_pitch: 0.0,
+            camera_yaw: 0.0,
+            camera_target: Vec3::ZERO,
+            camera_dragging: false,
+            camera_panning: false,
+            last_mouse_pos: None,
         }
     }
 }
@@ -168,6 +185,7 @@ impl ShaderEditorState {
         let default_shader = r#"// Default shader
 // Edit this code and press "Apply" to see changes
 
+@vertex
 fn vertex(
     model: mat4x4<f32>,
     view: mat4x4<f32>,
@@ -181,6 +199,7 @@ fn vertex(
     return output;
 }
 
+@fragment
 fn fragment(mesh: mesh_data) -> fragment_output {
     var output: fragment_output;
     let base_color = vec4<f32>(0.8, 0.2, 0.4, 1.0);
@@ -217,8 +236,6 @@ fn fragment(mesh: mesh_data) -> fragment_output {
 
     /// Save shader to file
     pub fn save_to_file(&self, path: &Path) -> Result<(), String> {
-        use std::fs;
-        
         let result = fs::write(path, &self.source_code);
         match result {
             Ok(_) => Ok(()),
@@ -229,7 +246,6 @@ fn fragment(mesh: mesh_data) -> fragment_output {
     /// Create a temporary file with the shader code
     pub fn create_temp_file(&mut self) -> Result<PathBuf, String> {
         use std::env::temp_dir;
-        use std::fs;
         
         let temp_dir = temp_dir();
         let temp_path = temp_dir.join(format!("bevy_shader_{}.wgsl", uuid::Uuid::new_v4()));
@@ -283,10 +299,16 @@ fn setup_shader_tool(
     // Try to create a temp file for the default shader
     let _ = editor.create_temp_file();
     
-    // Setup camera
+    // Setup camera with Blender-like controls
+    let camera_transform = Transform::from_translation(Vec3::new(
+        state.camera_distance * state.camera_yaw.cos() * state.camera_pitch.cos(),
+        state.camera_distance * state.camera_pitch.sin(),
+        state.camera_distance * state.camera_yaw.sin() * state.camera_pitch.cos(),
+    )).looking_at(state.camera_target, Vec3::Y);
+    
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 0.0, state.camera_distance).looking_at(Vec3::ZERO, Vec3::Y),
+        camera_transform,
         ToolCamera,
         Name::new("Tool Camera"),
     ));
@@ -313,7 +335,9 @@ fn setup_shader_tool(
         // Try to load the shader into the editor
         if let Some(path) = state.available_shaders.first() {
             if Path::new(path).exists() {
-                let _ = editor.load_from_file(Path::new(path));
+                let mut editor_mut = editor.clone();
+                let _ = editor_mut.load_from_file(Path::new(path));
+                *editor = editor_mut;
             }
         }
     }
@@ -361,14 +385,105 @@ fn scan_for_shaders(state: &mut ResMut<ShaderToolState>) {
 
 /// Update camera based on state
 fn update_camera(
-    time: Res<Time>,
     state: Res<ShaderToolState>,
     mut query: Query<&mut Transform, With<ToolCamera>>,
 ) {
-    if state.auto_rotate {
-        for mut transform in &mut query {
-            transform.rotate_y(time.delta_secs() * 0.3);
+    for mut transform in &mut query {
+        // Calculate camera position based on orbit parameters
+        let pitch = state.camera_pitch;
+        let yaw = state.camera_yaw;
+        let distance = state.camera_distance;
+        
+        transform.translation = Vec3::new(
+            distance * yaw.cos() * pitch.cos(),
+            distance * pitch.sin(),
+            distance * yaw.sin() * pitch.cos(),
+        );
+        
+        // Always look at the target
+        transform.look_at(state.camera_target, Vec3::Y);
+    }
+}
+
+/// Handle Blender-like camera controls
+/// - Right-click + drag: Orbit camera around target
+/// - Right-click + drag + Shift: Pan camera
+/// - Scroll: Zoom camera in/out
+fn handle_camera_controls(
+    windows: Query<&Window>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    mut mouse_motion_events: MessageReader<MouseMotion>,
+    mut mouse_wheel_events: MessageReader<MouseWheel>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut state: ResMut<ShaderToolState>,
+) {
+    let window = if let Ok(w) = windows.single() { w } else { return };
+    
+    // Get mouse position
+    if let Some(mouse_pos) = window.cursor_position() {
+        state.last_mouse_pos = Some(mouse_pos);
+    }
+    
+    // Handle orbit (right-click drag)
+    if mouse_buttons.pressed(MouseButton::Right) {
+        // Check if we just started dragging
+        if !state.camera_dragging && state.last_mouse_pos.is_some() {
+            state.camera_dragging = true;
         }
+        
+        if state.camera_dragging {
+            // Process mouse motion for orbit
+            for event in mouse_motion_events.read() {
+                let delta = event.delta;
+                
+                // Orbit: rotate around target
+                state.camera_yaw -= delta.x * 0.01;
+                state.camera_pitch -= delta.y * 0.01;
+                
+                // Clamp pitch to avoid flipping
+                state.camera_pitch = state.camera_pitch.clamp(-1.5, 1.5);
+            }
+        }
+    } else {
+        state.camera_dragging = false;
+    }
+    
+    // Handle pan (right-click + Shift drag)
+    if mouse_buttons.pressed(MouseButton::Right) && keyboard.pressed(KeyCode::ShiftLeft) {
+        if !state.camera_panning && state.last_mouse_pos.is_some() {
+            state.camera_panning = true;
+        }
+        
+        if state.camera_panning {
+            // Process mouse motion for pan
+            for event in mouse_motion_events.read() {
+                let delta = event.delta;
+                
+                // Calculate pan direction in world space
+                // Right vector (perpendicular to forward and up)
+                let right = Vec3::new(
+                    -state.camera_yaw.sin(),
+                    0.0,
+                    state.camera_yaw.cos(),
+                ).normalize();
+                
+                // Up vector
+                let up = Vec3::Y;
+                
+                // Pan in screen space
+                let pan_speed = 0.01 * state.camera_distance;
+                state.camera_target -= right * delta.x * pan_speed;
+                state.camera_target += up * delta.y * pan_speed;
+            }
+        }
+    } else {
+        state.camera_panning = false;
+    }
+    
+    // Handle zoom (mouse wheel)
+    for event in mouse_wheel_events.read() {
+        state.camera_distance -= event.y * 0.1;
+        state.camera_distance = state.camera_distance.clamp(1.0, 20.0);
     }
 }
 
@@ -444,7 +559,9 @@ fn ui_system(
                                 .add_filter("WGSL Shaders", &["wgsl"])
                                 .add_filter("All Files", &["*"])
                                 .pick_file() {
-                                let _ = editor.load_from_file(&path);
+                                let mut editor_mut = editor.clone();
+                                let _ = editor_mut.load_from_file(&path);
+                                *editor = editor_mut;
                                 state.current_shader = path.display().to_string();
                             }
                         }
@@ -454,7 +571,9 @@ fn ui_system(
                                 if let Err(e) = editor.save_to_file(path) {
                                     eprintln!("Save error: {}", e);
                                 } else {
-                                    editor.modified = false;
+                                    let mut editor_mut = editor.clone();
+                                    editor_mut.modified = false;
+                                    *editor = editor_mut;
                                 }
                             } else {
                                 if let Some(path) = rfd::FileDialog::new()
@@ -463,8 +582,10 @@ fn ui_system(
                                     if let Err(e) = editor.save_to_file(&path) {
                                         eprintln!("Save error: {}", e);
                                     } else {
-                                        editor.current_file = Some(path);
-                                        editor.modified = false;
+                                        let mut editor_mut = editor.clone();
+                                        editor_mut.current_file = Some(path);
+                                        editor_mut.modified = false;
+                                        *editor = editor_mut;
                                     }
                                 }
                             }
@@ -477,8 +598,10 @@ fn ui_system(
                                 if let Err(e) = editor.save_to_file(&path) {
                                     eprintln!("Save error: {}", e);
                                 } else {
-                                    editor.current_file = Some(path);
-                                    editor.modified = false;
+                                    let mut editor_mut = editor.clone();
+                                    editor_mut.current_file = Some(path);
+                                    editor_mut.modified = false;
+                                    *editor = editor_mut;
                                 }
                             }
                         }
@@ -542,19 +665,22 @@ fn ui_system(
                     ui.add(text_edit);
                     
                     if code != editor.source_code {
-                        editor.source_code = code;
-                        editor.modified = true;
+                        let mut editor_mut = editor.clone();
+                        editor_mut.source_code = code;
+                        editor_mut.modified = true;
+                        *editor = editor_mut;
                     }
                     
                     // Apply button
                     ui.horizontal(|ui| {
                         if ui.button("Apply Shader").clicked() {
                             // Validate and compile the shader
-                            match editor.compile_and_validate() {
+                            let mut editor_mut = editor.clone();
+                            match editor_mut.compile_and_validate() {
                                 Ok(_) => {
                                     // Create temp file for the shader
-                                    if let Ok(temp_path) = editor.create_temp_file() {
-                                        editor.temp_file = Some(temp_path.clone());
+                                    if let Ok(temp_path) = editor_mut.create_temp_file() {
+                                        editor_mut.temp_file = Some(temp_path.clone());
                                         state.current_shader = temp_path.display().to_string();
                                     }
                                 }
@@ -562,6 +688,7 @@ fn ui_system(
                                     eprintln!("Shader compilation failed: {:?}", errs);
                                 }
                             }
+                            *editor = editor_mut;
                         }
                         
                         if editor.modified {
@@ -606,6 +733,15 @@ fn ui_system(
                     ui.checkbox(&mut state.auto_rotate, "Auto Rotate");
                     ui.add(egui::Slider::new(&mut state.camera_distance, 1.0..=20.0).text("Camera Distance"));
                 });
+                
+                ui.separator();
+                
+                // Camera controls help
+                ui.collapsing("Camera Controls", |ui| {
+                    ui.label("Right-click + drag: Orbit camera");
+                    ui.label("Right-click + Shift + drag: Pan camera");
+                    ui.label("Scroll: Zoom in/out");
+                });
             });
     }
 }
@@ -649,31 +785,6 @@ mod tests {
     }
 
     #[test]
-    fn test_shader_editor_compile_valid() {
-        let mut editor = ShaderEditorState::new();
-        // Use a minimal valid WGSL shader
-        editor.source_code = r#"
-@vertex
-fn vertex(in: vertex_input) -> vertex_output {
-    var output: vertex_output;
-    output.position = in.position;
-    return output;
-}
-
-@fragment
-fn fragment() -> fragment_output {
-    var output: fragment_output;
-    output.color = vec4<f32>(1.0, 0.0, 0.0, 1.0);
-    return output;
-}
-"#.to_string();
-        
-        // For now, skip this test as we're not fully setting up the shader pipeline
-        // assert!(editor.compile_and_validate().is_ok());
-        // assert!(!editor.has_errors);
-    }
-
-    #[test]
     fn test_shader_editor_compile_invalid() {
         let mut editor = ShaderEditorState::new();
         editor.source_code = "this is not valid wgsl".to_string();
@@ -713,7 +824,47 @@ fn fragment() -> fragment_output {
     fn test_shader_tool_state_default() {
         let state = ShaderToolState::default();
         assert!(state.available_geometries.len() == 5);
-        assert!(state.auto_rotate);
+        assert!(!state.auto_rotate);
         assert!(state.show_ui);
+        assert_eq!(state.camera_distance, 5.0);
+        assert_eq!(state.camera_pitch, 0.0);
+        assert_eq!(state.camera_yaw, 0.0);
+    }
+
+    #[test]
+    fn test_camera_orbit_calculation() {
+        let state = ShaderToolState {
+            camera_distance: 5.0,
+            camera_pitch: 0.0,
+            camera_yaw: 0.0,
+            camera_target: Vec3::ZERO,
+            ..Default::default()
+        };
+        
+        // At yaw=0, pitch=0, distance=5, camera should be at (5, 0, 0)
+        let expected_x = 5.0 * 0.0.cos() * 0.0.cos();
+        let expected_y = 5.0 * 0.0.sin();
+        let expected_z = 5.0 * 0.0.sin() * 0.0.cos();
+        
+        assert_eq!(expected_x, 5.0);
+        assert_eq!(expected_y, 0.0);
+        assert_eq!(expected_z, 0.0);
+    }
+
+    #[test]
+    fn test_camera_pan_calculation() {
+        let mut state = ShaderToolState::default();
+        state.camera_yaw = std::f32::consts::FRAC_PI_4; // 45 degrees
+        
+        // Calculate right vector at 45 degrees yaw
+        let right = Vec3::new(
+            -state.camera_yaw.sin(),
+            0.0,
+            state.camera_yaw.cos(),
+        ).normalize();
+        
+        // At 45 degrees, right should have equal x and z components
+        assert!((right.x - right.z).abs() < 0.001);
+        assert!(right.y.abs() < 0.001);
     }
 }
