@@ -13,6 +13,7 @@ bevy = { version = "0.19.1", default-features = false, features = [
     "bevy_ui",
     "bevy_text",
     "bevy_pbr",
+    "bevy_camera",
     "tonemapping_luts",
     "png",
     "wayland",
@@ -27,6 +28,8 @@ uuid = { version = "1.10", features = ["v4"] }
 
 [dev-dependencies]
 tempfile = "3.10"
+image = { version = "0.25", features = ["png"] }
+crossbeam-channel = "0.5"
 
 [[bin]]
 name = "bevy-hello-world"
