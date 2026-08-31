@@ -121,7 +121,6 @@ impl Plugin for ShaderToolPlugin {
             .init_resource::<ShaderParameters>()
             .init_resource::<ShaderEditorState>()
             .add_plugins(MaterialPlugin::<ShaderToolMaterial>::default())
-            .add_plugins(MaterialPlugin::<StandardMaterial>::default())
             .add_systems(Startup, setup_tool)
             .add_systems(EguiPrimaryContextPass, ui_system)
             .add_systems(Update, (
